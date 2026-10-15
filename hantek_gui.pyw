@@ -176,6 +176,9 @@ def ping():
         device = None
         set_status("Status: Lost")
 
+# Try to connect once on startup
+try_connect()
+
 while True:
     event, values = window.read(timeout=500)
 
