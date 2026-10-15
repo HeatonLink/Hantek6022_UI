@@ -87,7 +87,7 @@ layout = [
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE1-", expand_x=True)],
     [sg.Text("CH2 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN2-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX2-", enable_events=True), sg.Checkbox("Auto", key="-AUTO2-", enable_events=True)],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-", expand_x=True)],
-    [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN-", expand_x=True, enable_events=True)],
+    [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN-", expand_x=True, enable_events=True, disable_number_display=True, disabled=True)],
 
     [sg.Text("Log", key="-LOGLABEL-", visible=False)],
     [sg.Multiline("GUI ready.\n", size=(70, 6), key="-LOG-", visible=False, expand_x=True)],
@@ -405,7 +405,7 @@ def parse_scale(s):
 
 def update_sliders():
     try:
-        window["-PAN-"].update(value=int(pan_start * 100))
+        window["-PAN-"].update(value=int(pan_start * 100), disabled=(zoom_x <= 1.0))
     except Exception:
         pass
 
