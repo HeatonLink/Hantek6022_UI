@@ -136,11 +136,14 @@ def set_model(model):
         set_status("Status: Waiting")
 
 def get_settings():
+    ch1 = bool(window["-CH1-"].get())
+    ch2 = bool(window["-CH2-"].get())
+    log(f"Saving CH1={ch1}, CH2={ch2}")
     return {
         "model": selected_model,
-        "ch1": bool(window["-CH1-"].get()),
+        "ch1": ch1,
         "scale1": window["-SCALE1-"].get(),
-        "ch2": bool(window["-CH2-"].get()),
+        "ch2": ch2,
         "scale2": window["-SCALE2-"].get(),
         "srate": window["-SRATE-"].get(),
         "nsamp": window["-NSAMP-"].get(),
@@ -159,10 +162,12 @@ def set_settings(s):
             set_model(s["model"])
         if "ch1" in s:
             window["-CH1-"].update(bool(s["ch1"]))
+            log(f"Restored CH1={s['ch1']}")
         if "scale1" in s:
             window["-SCALE1-"].update(s["scale1"])
         if "ch2" in s:
             window["-CH2-"].update(bool(s["ch2"]))
+            log(f"Restored CH2={s['ch2']}")
         if "scale2" in s:
             window["-SCALE2-"].update(s["scale2"])
         if "srate" in s:
@@ -265,7 +270,6 @@ def apply_settings():
         log(f"Setting timebase: {tb} s/div")
         device.set_timebase_scale(tb)
 
-        # Trigger
         src = 0 if window["-TRIGSRC-"].get() == "CH1" else 1
         log(f"Setting trigger source: {src}")
         try:
@@ -568,7 +572,12 @@ while True:
         if last_data is not None:
             draw_waveforms(last_data)
 
-    if event in ("-CH1-", "-SCALE1-", "-CH2-", "-SCALE2-", "-SRATE-", "-NSAMP-",
+    # Force save on checkbox changes
+    if event in ("-CH1-", "-CH2-"):
+        log(f"Checkbox event: {event} = {values.get(event)}")
+        auto_save()
+
+    if event in ("-SCALE1-", "-SCALE2-", "-SRATE-", "-NSAMP-",
                  "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-"):
         auto_save()
 
