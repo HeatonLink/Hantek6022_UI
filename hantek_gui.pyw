@@ -30,7 +30,6 @@ drag_start_x = None
 drag_start_pan = 0.0
 
 SETTINGS_FILE = os.path.join(os.path.expanduser("~"), ".hantek6022_settings.json")
-log(f"Settings file: {SETTINGS_FILE}")
 
 menu_def = [
     ["File", ["Save Settings", "Load Settings"]],
@@ -526,6 +525,7 @@ def ping():
         device = None
         set_status("Status: Lost")
 
+log(f"Settings file: {SETTINGS_FILE}")
 load_auto_settings()
 try_connect()
 
