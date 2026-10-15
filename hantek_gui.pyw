@@ -1,6 +1,7 @@
 import PySimpleGUI as sg
 import time
 import json
+import os
 
 sg.theme("DarkAmber")
 
@@ -20,6 +21,8 @@ device = None
 last_ping = 0
 log_visible = False
 
+SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+
 menu_def = [
     ["File", ["Save Settings", "Load Settings"]],
     ["Options", ["Device", ["Hantek 6022BE", "Hantek 6022BL"], "Show Log"]]
@@ -30,24 +33,24 @@ num_samples = ["1000", "2000", "5000", "10000", "20000", "50000"]
 
 channels_col = [
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
-    [sg.Checkbox("CH1", default=True, key="-CH1-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE1-")],
-    [sg.Checkbox("CH2", default=False, key="-CH2-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE2-")],
-    [sg.Text("Sample Rate"), sg.Combo(sample_rates, default_value="1MS/s", size=(10, 1), key="-SRATE-")],
-    [sg.Text("Samples"), sg.Combo(num_samples, default_value="10000", size=(10, 1), key="-NSAMP-")],
+    [sg.Checkbox("CH1", default=True, key="-CH1-", enable_events=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE1-", enable_events=True)],
+    [sg.Checkbox("CH2", default=False, key="-CH2-", enable_events=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE2-", enable_events=True)],
+    [sg.Text("Sample Rate"), sg.Combo(sample_rates, default_value="1MS/s", size=(10, 1), key="-SRATE-", enable_events=True)],
+    [sg.Text("Samples"), sg.Combo(num_samples, default_value="10000", size=(10, 1), key="-NSAMP-", enable_events=True)],
 ]
 
 trigger_col = [
     [sg.Text("Trigger", font=("Helvetica", 12, "bold"))],
-    [sg.Text("Source"), sg.Combo(["CH1", "CH2"], default_value="CH1", size=(8, 1), key="-TRIGSRC-")],
-    [sg.Text("Slope"), sg.Combo(["Rising", "Falling", "Both"], default_value="Rising", size=(8, 1), key="-SLOPE-")],
-    [sg.Text("Level"), sg.Input("0.0", size=(8, 1), key="-LEVEL-"), sg.Text("V")],
-    [sg.Text("Position"), sg.Slider(range=(0, 100), default_value=50, orientation="h", size=(15, 15), key="-POS-")],
-    [sg.Radio("Auto", "MODE", default=True, key="-AUTO-"), sg.Radio("Normal", "MODE", key="-NORM-"), sg.Radio("Single", "MODE", key="-SINGLE-")],
+    [sg.Text("Source"), sg.Combo(["CH1", "CH2"], default_value="CH1", size=(8, 1), key="-TRIGSRC-", enable_events=True)],
+    [sg.Text("Slope"), sg.Combo(["Rising", "Falling", "Both"], default_value="Rising", size=(8, 1), key="-SLOPE-", enable_events=True)],
+    [sg.Text("Level"), sg.Input("0.0", size=(8, 1), key="-LEVEL-", enable_events=True), sg.Text("V")],
+    [sg.Text("Position"), sg.Slider(range=(0, 100), default_value=50, orientation="h", size=(15, 15), key="-POS-", enable_events=True)],
+    [sg.Radio("Auto", "MODE", default=True, key="-AUTO-", enable_events=True), sg.Radio("Normal", "MODE", key="-NORM-", enable_events=True), sg.Radio("Single", "MODE", key="-SINGLE-", enable_events=True)],
 ]
 
 timebase_col = [
     [sg.Text("Timebase", font=("Helvetica", 12, "bold"))],
-    [sg.Combo(["100us", "200us", "500us", "1ms", "2ms", "5ms", "10ms", "20ms"], default_value="1ms", size=(10, 1), key="-TB-"), sg.Text("/div")],
+    [sg.Combo(["100us", "200us", "500us", "1ms", "2ms", "5ms", "10ms", "20ms"], default_value="1ms", size=(10, 1), key="-TB-", enable_events=True), sg.Text("/div")],
 ]
 
 layout = [
@@ -175,6 +178,23 @@ def set_settings(s):
     except Exception as e:
         log(f"Load settings error: {e}")
 
+def auto_save():
+    try:
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(get_settings(), f, indent=2)
+    except Exception:
+        pass
+
+def load_auto_settings():
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r") as f:
+                s = json.load(f)
+            set_settings(s)
+            log("Restored previous settings")
+        except Exception as e:
+            log(f"Auto-load failed: {e}")
+
 def save_settings():
     path = sg.popup_get_file("Save settings", save_as=True, file_types=(("JSON", "*.json"),), default_extension=".json", no_window=True)
     if not path:
@@ -194,6 +214,7 @@ def load_settings():
         with open(path, "r") as f:
             s = json.load(f)
         set_settings(s)
+        auto_save()
     except Exception as e:
         log(f"Load failed: {e}")
 
@@ -358,6 +379,9 @@ def ping():
         device = None
         set_status("Status: Lost")
 
+# Load previous settings on startup
+load_auto_settings()
+
 # Try to connect once on startup
 try_connect()
 
@@ -365,6 +389,7 @@ while True:
     event, values = window.read(timeout=500)
 
     if event in (sg.WIN_CLOSED, "Exit"):
+        auto_save()
         break
 
     if event == "Save Settings":
@@ -375,9 +400,11 @@ while True:
 
     if event == "Hantek 6022BE":
         set_model("Hantek 6022BE")
+        auto_save()
 
     if event == "Hantek 6022BL":
         set_model("Hantek 6022BL")
+        auto_save()
 
     if event == "Show Log":
         toggle_log()
@@ -390,6 +417,11 @@ while True:
 
     if event == "-ACQ-":
         do_acquire()
+
+    # Auto-save on any setting change
+    if event in ("-CH1-", "-SCALE1-", "-CH2-", "-SCALE2-", "-SRATE-", "-NSAMP-",
+                 "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-"):
+        auto_save()
 
     # Only ping while connected (no auto-connect)
     now = time.time()
