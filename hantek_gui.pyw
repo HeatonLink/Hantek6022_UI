@@ -1,14 +1,34 @@
 import PySimpleGUI as sg
+import time
 
 sg.theme("DarkAmber")
 
+# Device library is optional — GUI still opens if missing
+try:
+    from pyhantek6022.dso6022be import DSO6022BE, get_dsos
+    from pyhantek6022.firmwareupload import FirmwareUploader
+    DEVICE_OK = True
+except Exception:
+    DEVICE_OK = False
+    DSO6022BE = None
+    get_dsos = None
+    FirmwareUploader = None
+
+selected_model = "Hantek 6022BE"
+connected = False
+device = None
+last_action = 0
+
+menu_def = [["Options", ["Hantek 6022BE", "Hantek 6022BL"]]]
+
 layout = [
+    [sg.Menu(menu_def)],
     [sg.Text("HANTEK 6022", font=("Helvetica", 16, "bold"))],
-    [sg.Text("Visual GUI")],
+    [sg.Text("Model: Hantek 6022BE", key="-MODEL-")],
     [sg.HorizontalSeparator()],
 
     [sg.Text("Device")],
-    [sg.Combo(["No device", "Hantek 6022BE", "Hantek 6022BL"], default_value="No device", size=(25, 1))],
+    [sg.Combo(["Hantek 6022BE", "Hantek 6022BL"], default_value="Hantek 6022BE", size=(25, 1), key="-DEV-")],
     [sg.Button("Refresh"), sg.Button("Connect"), sg.Button("Disconnect")],
 
     [sg.HorizontalSeparator()],
@@ -32,7 +52,7 @@ layout = [
     [sg.Button("Apply"), sg.Button("Acquire"), sg.Button("Run / Stop"), sg.Button("Force Trigger")],
 
     [sg.HorizontalSeparator()],
-    [sg.Text("Status: Stopped", key="-STATUS-")],
+    [sg.Text("Status: Waiting", key="-STATUS-")],
     [sg.Text("CH1: 0.00 V   CH2: 0.00 V")],
 
     [sg.HorizontalSeparator()],
@@ -43,11 +63,121 @@ layout = [
 
     [sg.HorizontalSeparator()],
     [sg.Text("Log")],
-    [sg.Multiline("GUI ready.\n", size=(70, 5), disabled=True)],
+    [sg.Multiline("GUI ready. Default model: Hantek 6022BE\n", size=(70, 6), key="-LOG-")],
 ]
 
-window = sg.Window("Hantek 6022", layout, resizable=True)
+window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
 
-event, values = window.read()
+def log(msg):
+    current = window["-LOG-"].get()
+    lines = (current + msg + "\n").splitlines()[-30:]
+    window["-LOG-"].update("\n".join(lines) + "\n")
+
+def try_connect():
+    global connected, device
+    if not DEVICE_OK:
+        log("Device library not installed (pip install pyhantek6022)")
+        return False
+    try:
+        log(f"Trying to connect to {selected_model}...")
+        try:
+            FirmwareUploader.init_all()
+        except Exception:
+            pass
+        dsos = get_dsos() or []
+        if not dsos:
+            log("No device found")
+            return False
+        device = DSO6022BE(dsos[0])
+        device.connect()
+        connected = True
+        window["-STATUS-"].update("Status: Connected")
+        log("Connected")
+        return True
+    except Exception as e:
+        log(f"Connect failed: {e}")
+        connected = False
+        device = None
+        window["-STATUS-"].update("Status: Not connected")
+        return False
+
+def ping():
+    global connected, device
+    if not connected or device is None:
+        return
+    try:
+        # Simple check that the device still responds
+        _ = device.identify()
+        log("Ping OK")
+    except Exception as e:
+        log(f"Ping failed: {e}")
+        connected = False
+        device = None
+        window["-STATUS-"].update("Status: Disconnected")
+
+while True:
+    event, values = window.read(timeout=500)
+
+    if event in (sg.WIN_CLOSED, "Exit"):
+        break
+
+    if event == "Hantek 6022BE":
+        selected_model = "Hantek 6022BE"
+        window["-DEV-"].update(value=selected_model)
+        window["-MODEL-"].update(f"Model: {selected_model}")
+        log("Model set to Hantek 6022BE")
+        if connected:
+            try:
+                device.disconnect()
+            except Exception:
+                pass
+            connected = False
+            device = None
+            window["-STATUS-"].update("Status: Waiting")
+
+    if event == "Hantek 6022BL":
+        selected_model = "Hantek 6022BL"
+        window["-DEV-"].update(value=selected_model)
+        window["-MODEL-"].update(f"Model: {selected_model}")
+        log("Model set to Hantek 6022BL")
+        if connected:
+            try:
+                device.disconnect()
+            except Exception:
+                pass
+            connected = False
+            device = None
+            window["-STATUS-"].update("Status: Waiting")
+
+    if event == "Connect":
+        try_connect()
+        last_action = time.time()
+
+    if event == "Disconnect":
+        if device is not None:
+            try:
+                device.disconnect()
+            except Exception:
+                pass
+        connected = False
+        device = None
+        window["-STATUS-"].update("Status: Disconnected")
+        log("Disconnected")
+        last_action = time.time()
+
+    # Every 5 seconds: try connect if not connected, or ping if connected
+    now = time.time()
+    if now - last_action >= 5:
+        if not connected:
+            try_connect()
+        else:
+            ping()
+        last_action = now
+
+if device is not None:
+    try:
+        device.disconnect()
+    except Exception:
+        pass
 
 window.close()
