@@ -25,6 +25,7 @@ last_width = 0
 zoom_x = 1.0
 pan_start = 0.0
 last_save = 0
+current_values = {}
 
 drag_start_x = None
 drag_start_pan = 0.0
@@ -136,23 +137,29 @@ def set_model(model):
         device = None
         set_status("Status: Waiting")
 
+def safe_get(key, default=None):
+    try:
+        return window[key].get()
+    except Exception:
+        return current_values.get(key, default)
+
 def get_settings():
-    ch1 = bool(window["-CH1-"].get())
-    ch2 = bool(window["-CH2-"].get())
+    ch1 = bool(safe_get("-CH1-", True))
+    ch2 = bool(safe_get("-CH2-", False))
     return {
         "model": selected_model,
         "ch1": ch1,
-        "scale1": window["-SCALE1-"].get(),
+        "scale1": safe_get("-SCALE1-", "1V"),
         "ch2": ch2,
-        "scale2": window["-SCALE2-"].get(),
-        "srate": window["-SRATE-"].get(),
-        "nsamp": window["-NSAMP-"].get(),
-        "trigsrc": window["-TRIGSRC-"].get(),
-        "slope": window["-SLOPE-"].get(),
-        "level": window["-LEVEL-"].get(),
-        "pos": window["-POS-"].get(),
-        "mode": "Auto" if window["-AUTO-"].get() else ("Normal" if window["-NORM-"].get() else "Single"),
-        "tb": window["-TB-"].get(),
+        "scale2": safe_get("-SCALE2-", "1V"),
+        "srate": safe_get("-SRATE-", "1MS/s"),
+        "nsamp": safe_get("-NSAMP-", "10000"),
+        "trigsrc": safe_get("-TRIGSRC-", "CH1"),
+        "slope": safe_get("-SLOPE-", "Rising"),
+        "level": safe_get("-LEVEL-", "0.0"),
+        "pos": safe_get("-POS-", 50),
+        "mode": "Auto" if safe_get("-AUTO-", True) else ("Normal" if safe_get("-NORM-", False) else "Single"),
+        "tb": safe_get("-TB-", "1ms"),
     }
 
 def set_settings(s):
@@ -531,6 +538,7 @@ try_connect()
 
 while True:
     event, values = window.read(timeout=500)
+    current_values = values or {}
 
     if event in (sg.WIN_CLOSED, "Exit"):
         auto_save()
