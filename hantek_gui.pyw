@@ -20,6 +20,8 @@ connected = False
 device = None
 last_ping = 0
 log_visible = False
+last_data = None
+last_width = 0
 
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
 
@@ -87,6 +89,7 @@ window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
 # Set current size as minimum
 win_size = window.size
 window.TKroot.minsize(win_size[0], win_size[1])
+last_width = win_size[0]
 
 def log(msg):
     try:
@@ -336,12 +339,15 @@ def plot_trace(canvas_key, ydata, color, scale_key):
         canvas.create_line(pts, fill=color, width=1)
 
 def draw_waveforms(data):
+    if data is None:
+        return
     y0 = data.get("y0") if data.get("y0") is not None else data.get("y")
     y1 = data.get("y1")
     plot_trace("-WAVE1-", y0, "#FFD700", "-SCALE1-")
     plot_trace("-WAVE2-", y1, "#00FFFF", "-SCALE2-")
 
 def do_acquire():
+    global last_data
     if not connected or device is None:
         log("Not connected")
         return
@@ -355,6 +361,7 @@ def do_acquire():
         if not channels:
             channels = [0]
         data = device.query_waveform(channels)
+        last_data = data
         y0 = to_list(data.get("y0") if data.get("y0") is not None else data.get("y"))
         y1 = to_list(data.get("y1"))
         log(f"Acquired CH1: {len(y0)} samples, CH2: {len(y1)} samples")
@@ -391,6 +398,12 @@ while True:
     if event in (sg.WIN_CLOSED, "Exit"):
         auto_save()
         break
+
+    # Redraw charts if window width changed
+    current_width = window.size[0]
+    if current_width != last_width and last_data is not None:
+        draw_waveforms(last_data)
+        last_width = current_width
 
     if event == "Save Settings":
         save_settings()
