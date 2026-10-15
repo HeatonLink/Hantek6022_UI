@@ -22,7 +22,11 @@ last_ping = 0
 log_visible = False
 last_data = None
 last_width = 0
-zoom_x = 1.0  # 1.0 = full width, higher = zoomed in
+zoom_x = 1.0
+pan_start = 0.0  # 0.0 to 1.0 fraction of data
+
+drag_start_x = None
+drag_start_pan = 0.0
 
 # Use home directory for reliable settings path
 SETTINGS_FILE = os.path.join(os.path.expanduser("~"), ".hantek6022_settings.json")
@@ -79,8 +83,10 @@ layout = [
     [sg.HorizontalSeparator()],
     [sg.Text("CH1 Waveform")],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE1-", expand_x=True)],
+    [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN1-", expand_x=True, enable_events=True)],
     [sg.Text("CH2 Waveform")],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-", expand_x=True)],
+    [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN2-", expand_x=True, enable_events=True)],
 
     [sg.Text("Log", key="-LOGLABEL-", visible=False)],
     [sg.Multiline("GUI ready.\n\n", size=(70, 6), key="-LOG-", visible=False, expand_x=True)],
@@ -297,6 +303,10 @@ def parse_scale(s):
     except Exception:
         return 1.0
 
+def update_sliders():
+    window["-PAN1-"].update(value=int(pan_start * 100))
+    window["-PAN2-"].update(value=int(pan_start * 100))
+
 def plot_trace(canvas_key, ydata, color, scale_key):
     canvas = window[canvas_key].TKCanvas
     canvas.delete("all")
@@ -327,13 +337,14 @@ def plot_trace(canvas_key, ydata, color, scale_key):
     tb = window["-TB-"].get()
     canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div  (zoom {zoom_x:.1f}x)", fill="#aaa", font=("Arial", 9))
 
-    # Plot with X zoom
+    # Plot with X zoom and pan
     ydata = to_list(ydata)
     if len(ydata) < 2:
         return
     n = len(ydata)
     visible = max(2, int(n / zoom_x))
-    start = max(0, (n - visible) // 2)
+    max_start = max(0, n - visible)
+    start = int(pan_start * max_start)
     end = min(n, start + visible)
     view = ydata[start:end]
     if len(view) < 2:
@@ -359,8 +370,7 @@ def draw_waveforms(data):
     plot_trace("-WAVE2-", y1, "#00FFFF", "-SCALE2-")
 
 def on_wheel(event, canvas_key):
-    global zoom_x
-    # event.delta on Windows, event.num on Linux
+    global zoom_x, pan_start
     delta = getattr(event, "delta", 0)
     if delta == 0:
         delta = 1 if getattr(event, "num", 0) == 4 else -1
@@ -370,18 +380,44 @@ def on_wheel(event, canvas_key):
         zoom_x = max(1.0, zoom_x / 1.2)
     if last_data is not None:
         draw_waveforms(last_data)
+        update_sliders()
 
-def bind_wheel():
+def on_press(event):
+    global drag_start_x, drag_start_pan
+    drag_start_x = event.x
+    drag_start_pan = pan_start
+
+def on_drag(event):
+    global pan_start
+    if drag_start_x is None or last_data is None:
+        return
+    dx = event.x - drag_start_x
+    # Convert pixel drag to pan fraction
+    canvas = event.widget
+    w = canvas.winfo_width() or 600
+    fraction = -dx / max(w, 1)
+    pan_start = max(0.0, min(1.0, drag_start_pan + fraction))
+    draw_waveforms(last_data)
+    update_sliders()
+
+def on_release(event):
+    global drag_start_x
+    drag_start_x = None
+
+def bind_events():
     for key in ("-WAVE1-", "-WAVE2-"):
         canvas = window[key].TKCanvas
         canvas.bind("<MouseWheel>", lambda e, k=key: on_wheel(e, k))
         canvas.bind("<Button-4>", lambda e, k=key: on_wheel(e, k))
         canvas.bind("<Button-5>", lambda e, k=key: on_wheel(e, k))
+        canvas.bind("<ButtonPress-1>", on_press)
+        canvas.bind("<B1-Motion>", on_drag)
+        canvas.bind("<ButtonRelease-1>", on_release)
 
-bind_wheel()
+bind_events()
 
 def do_acquire():
-    global last_data, zoom_x
+    global last_data, zoom_x, pan_start
     if not connected or device is None:
         log("Not connected")
         return
@@ -397,6 +433,7 @@ def do_acquire():
         data = device.query_waveform(channels)
         last_data = data
         zoom_x = 1.0
+        pan_start = 0.0
         y0 = to_list(data.get("y0") if data.get("y0") is not None else data.get("y"))
         y1 = to_list(data.get("y1"))
         log(f"Acquired CH1: {len(y0)} samples, CH2: {len(y1)} samples")
@@ -404,6 +441,7 @@ def do_acquire():
         m1 = sum(y1) / len(y1) if len(y1) > 0 else 0.0
         window["-READOUT-"].update(f"CH1: {m0:.3f} V   CH2: {m1:.3f} V")
         draw_waveforms(data)
+        update_sliders()
         log("Acquire done")
     except Exception as e:
         log(f"Acquire failed: {e}")
@@ -465,6 +503,11 @@ while True:
 
     if event == "-ACQ-":
         do_acquire()
+
+    if event in ("-PAN1-", "-PAN2-"):
+        pan_start = values[event] / 100.0
+        if last_data is not None:
+            draw_waveforms(last_data)
 
     # Auto-save on any setting change (including CH1/CH2)
     if event in ("-CH1-", "-SCALE1-", "-CH2-", "-SCALE2-", "-SRATE-", "-NSAMP-",
