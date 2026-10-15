@@ -23,7 +23,8 @@ log_visible = False
 last_data = None
 last_width = 0
 
-SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+# Use home directory for reliable settings path
+SETTINGS_FILE = os.path.join(os.path.expanduser("~"), ".hantek6022_settings.json")
 
 menu_def = [
     ["File", ["Save Settings", "Load Settings"]],
@@ -132,9 +133,9 @@ def set_model(model):
 def get_settings():
     return {
         "model": selected_model,
-        "ch1": window["-CH1-"].get(),
+        "ch1": bool(window["-CH1-"].get()),
         "scale1": window["-SCALE1-"].get(),
-        "ch2": window["-CH2-"].get(),
+        "ch2": bool(window["-CH2-"].get()),
         "scale2": window["-SCALE2-"].get(),
         "srate": window["-SRATE-"].get(),
         "nsamp": window["-NSAMP-"].get(),
@@ -152,11 +153,11 @@ def set_settings(s):
         if "model" in s:
             set_model(s["model"])
         if "ch1" in s:
-            window["-CH1-"].update(s["ch1"])
+            window["-CH1-"].update(bool(s["ch1"]))
         if "scale1" in s:
             window["-SCALE1-"].update(s["scale1"])
         if "ch2" in s:
-            window["-CH2-"].update(s["ch2"])
+            window["-CH2-"].update(bool(s["ch2"]))
         if "scale2" in s:
             window["-SCALE2-"].update(s["scale2"])
         if "srate" in s:
@@ -185,8 +186,9 @@ def auto_save():
     try:
         with open(SETTINGS_FILE, "w") as f:
             json.dump(get_settings(), f, indent=2)
-    except Exception:
-        pass
+        log(f"Settings saved to {SETTINGS_FILE}")
+    except Exception as e:
+        log(f"Auto-save failed: {e}")
 
 def load_auto_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -197,6 +199,8 @@ def load_auto_settings():
             log("Restored previous settings")
         except Exception as e:
             log(f"Auto-load failed: {e}")
+    else:
+        log("No previous settings found")
 
 def save_settings():
     path = sg.popup_get_file("Save settings", save_as=True, file_types=(("JSON", "*.json"),), default_extension=".json", no_window=True)
@@ -431,7 +435,7 @@ while True:
     if event == "-ACQ-":
         do_acquire()
 
-    # Auto-save on any setting change
+    # Auto-save on any setting change (including CH1/CH2)
     if event in ("-CH1-", "-SCALE1-", "-CH2-", "-SCALE2-", "-SRATE-", "-NSAMP-",
                  "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-"):
         auto_save()
