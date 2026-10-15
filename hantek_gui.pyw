@@ -45,6 +45,7 @@ layout = [
     [sg.Menu(menu_def, key="-MENU-")],
     [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-"),
      sg.Push(),
+     sg.Button("Connect", key="-CONN-", size=(12, 1)),
      sg.Text("Status: Waiting", key="-STATUS-")],
     [sg.HorizontalSeparator()],
 
@@ -84,6 +85,13 @@ def toggle_log():
     window["-LOG-"].update(visible=log_visible)
     window["-LOGLABEL-"].update(visible=log_visible)
 
+def set_status(text):
+    window["-STATUS-"].update(text)
+    if connected:
+        window["-CONN-"].update("Disconnect")
+    else:
+        window["-CONN-"].update("Connect")
+
 def set_model(model):
     global selected_model, connected, device
     if model == selected_model:
@@ -98,15 +106,17 @@ def set_model(model):
             pass
         connected = False
         device = None
-        window["-STATUS-"].update("Status: Waiting")
+        set_status("Status: Waiting")
 
 def try_connect():
     global connected, device
     if not DEVICE_OK:
-        log("Device library not installed")
+        log("Device library not installed (pip install pyhantek6022)")
+        set_status("Status: No library")
         return False
     try:
         log(f"Trying to connect to {selected_model}...")
+        set_status("Status: Connecting...")
         try:
             FirmwareUploader.init_all()
         except Exception:
@@ -114,19 +124,32 @@ def try_connect():
         dsos = get_dsos() or []
         if not dsos:
             log("No device found")
+            set_status("Status: No device")
             return False
         device = DSO6022BE(dsos[0])
         device.connect()
         connected = True
-        window["-STATUS-"].update("Status: Connected")
+        set_status("Status: Connected")
         log("Connected")
         return True
     except Exception as e:
         log(f"Connect failed: {e}")
         connected = False
         device = None
-        window["-STATUS-"].update("Status: Not connected")
+        set_status("Status: Failed")
         return False
+
+def do_disconnect():
+    global connected, device
+    if device is not None:
+        try:
+            device.disconnect()
+        except Exception:
+            pass
+    connected = False
+    device = None
+    set_status("Status: Disconnected")
+    log("Disconnected")
 
 def ping():
     global connected, device
@@ -139,7 +162,7 @@ def ping():
         log(f"Ping failed: {e}")
         connected = False
         device = None
-        window["-STATUS-"].update("Status: Disconnected")
+        set_status("Status: Lost")
 
 while True:
     event, values = window.read(timeout=500)
@@ -155,6 +178,13 @@ while True:
 
     if event == "Show Log":
         toggle_log()
+
+    if event == "-CONN-":
+        if connected:
+            do_disconnect()
+        else:
+            try_connect()
+        last_action = time.time()
 
     now = time.time()
     if now - last_action >= 5:
