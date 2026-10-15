@@ -91,6 +91,7 @@ def toggle_log():
 
 def set_status(text):
     window["-STATUS-"].update(text)
+    window["-CONN-"].update(disabled=connected)
 
 def set_model(model):
     global selected_model, connected, device
