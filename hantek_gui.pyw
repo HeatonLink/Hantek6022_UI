@@ -1,5 +1,6 @@
 import PySimpleGUI as sg
 import time
+import json
 
 sg.theme("DarkAmber")
 
@@ -19,7 +20,10 @@ device = None
 last_ping = 0
 log_visible = False
 
-menu_def = [["Options", ["Device", ["Hantek 6022BE", "Hantek 6022BL"], "Show Log"]]]
+menu_def = [
+    ["File", ["Save Settings", "Load Settings"]],
+    ["Options", ["Device", ["Hantek 6022BE", "Hantek 6022BL"], "Show Log"]]
+]
 
 channels_col = [
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
@@ -29,11 +33,11 @@ channels_col = [
 
 trigger_col = [
     [sg.Text("Trigger", font=("Helvetica", 12, "bold"))],
-    [sg.Text("Source"), sg.Combo(["CH1", "CH2"], default_value="CH1", size=(8, 1))],
-    [sg.Text("Slope"), sg.Combo(["Rising", "Falling", "Both"], default_value="Rising", size=(8, 1))],
-    [sg.Text("Level"), sg.Input("0.0", size=(8, 1)), sg.Text("V")],
-    [sg.Text("Position"), sg.Slider(range=(0, 100), default_value=50, orientation="h", size=(15, 15))],
-    [sg.Radio("Auto", "MODE", default=True), sg.Radio("Normal", "MODE"), sg.Radio("Single", "MODE")],
+    [sg.Text("Source"), sg.Combo(["CH1", "CH2"], default_value="CH1", size=(8, 1), key="-TRIGSRC-")],
+    [sg.Text("Slope"), sg.Combo(["Rising", "Falling", "Both"], default_value="Rising", size=(8, 1), key="-SLOPE-")],
+    [sg.Text("Level"), sg.Input("0.0", size=(8, 1), key="-LEVEL-"), sg.Text("V")],
+    [sg.Text("Position"), sg.Slider(range=(0, 100), default_value=50, orientation="h", size=(15, 15), key="-POS-")],
+    [sg.Radio("Auto", "MODE", default=True, key="-AUTO-"), sg.Radio("Normal", "MODE", key="-NORM-"), sg.Radio("Single", "MODE", key="-SINGLE-")],
 ]
 
 timebase_col = [
@@ -109,6 +113,74 @@ def set_model(model):
         connected = False
         device = None
         set_status("Status: Waiting")
+
+def get_settings():
+    return {
+        "model": selected_model,
+        "ch1": window["-CH1-"].get(),
+        "scale1": window["-SCALE1-"].get(),
+        "ch2": window["-CH2-"].get(),
+        "scale2": window["-SCALE2-"].get(),
+        "trigsrc": window["-TRIGSRC-"].get(),
+        "slope": window["-SLOPE-"].get(),
+        "level": window["-LEVEL-"].get(),
+        "pos": window["-POS-"].get(),
+        "mode": "Auto" if window["-AUTO-"].get() else ("Normal" if window["-NORM-"].get() else "Single"),
+        "tb": window["-TB-"].get(),
+    }
+
+def set_settings(s):
+    global selected_model
+    try:
+        if "model" in s:
+            set_model(s["model"])
+        if "ch1" in s:
+            window["-CH1-"].update(s["ch1"])
+        if "scale1" in s:
+            window["-SCALE1-"].update(s["scale1"])
+        if "ch2" in s:
+            window["-CH2-"].update(s["ch2"])
+        if "scale2" in s:
+            window["-SCALE2-"].update(s["scale2"])
+        if "trigsrc" in s:
+            window["-TRIGSRC-"].update(s["trigsrc"])
+        if "slope" in s:
+            window["-SLOPE-"].update(s["slope"])
+        if "level" in s:
+            window["-LEVEL-"].update(s["level"])
+        if "pos" in s:
+            window["-POS-"].update(s["pos"])
+        if "mode" in s:
+            window["-AUTO-"].update(s["mode"] == "Auto")
+            window["-NORM-"].update(s["mode"] == "Normal")
+            window["-SINGLE-"].update(s["mode"] == "Single")
+        if "tb" in s:
+            window["-TB-"].update(s["tb"])
+        log("Settings loaded")
+    except Exception as e:
+        log(f"Load settings error: {e}")
+
+def save_settings():
+    path = sg.popup_get_file("Save settings", save_as=True, file_types=(("JSON", "*.json"),), default_extension=".json", no_window=True)
+    if not path:
+        return
+    try:
+        with open(path, "w") as f:
+            json.dump(get_settings(), f, indent=2)
+        log(f"Settings saved to {path}")
+    except Exception as e:
+        log(f"Save failed: {e}")
+
+def load_settings():
+    path = sg.popup_get_file("Load settings", file_types=(("JSON", "*.json"),), no_window=True)
+    if not path:
+        return
+    try:
+        with open(path, "r") as f:
+            s = json.load(f)
+        set_settings(s)
+    except Exception as e:
+        log(f"Load failed: {e}")
 
 def try_connect():
     global connected, device
@@ -263,6 +335,12 @@ while True:
 
     if event in (sg.WIN_CLOSED, "Exit"):
         break
+
+    if event == "Save Settings":
+        save_settings()
+
+    if event == "Load Settings":
+        load_settings()
 
     if event == "Hantek 6022BE":
         set_model("Hantek 6022BE")
