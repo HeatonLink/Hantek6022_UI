@@ -67,7 +67,7 @@ layout = [
     [sg.Canvas(size=(600, 150), background_color="black")],
 
     [sg.Text("Log", key="-LOGLABEL-", visible=False)],
-    [sg.Multiline("GUI ready.\n", size=(70, 6), key="-LOG-", visible=False)],
+    [sg.Multiline("GUI ready.\n\n", size=(70, 6), key="-LOG-", visible=False)],
 ]
 
 window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
@@ -75,8 +75,13 @@ window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
 def log(msg):
     try:
         current = window["-LOG-"].get()
-        lines = (current + msg + "\n\n").splitlines()[-40:]
-        window["-LOG-"].update("\n".join(lines) + "\n")
+        if not current.endswith("\n"):
+            current += "\n"
+        new_text = current + msg + "\n\n"
+        lines = new_text.splitlines(keepends=True)
+        if len(lines) > 40:
+            new_text = "".join(lines[-40:])
+        window["-LOG-"].update(new_text)
     except Exception:
         pass
 
