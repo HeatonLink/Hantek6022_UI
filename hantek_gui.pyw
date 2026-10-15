@@ -83,9 +83,9 @@ layout = [
     [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-")],
 
     [sg.HorizontalSeparator()],
-    [sg.Text("CH1 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN1-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX1-", enable_events=True)],
+    [sg.Text("CH1 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN1-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX1-", enable_events=True), sg.Checkbox("Auto", key="-AUTO1-", enable_events=True)],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE1-", expand_x=True)],
-    [sg.Text("CH2 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN2-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX2-", enable_events=True)],
+    [sg.Text("CH2 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN2-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX2-", enable_events=True), sg.Checkbox("Auto", key="-AUTO2-", enable_events=True)],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-", expand_x=True)],
     [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN-", expand_x=True, enable_events=True)],
 
@@ -170,8 +170,10 @@ def get_settings():
         "tb": safe_get("-TB-", "1ms"),
         "ymin1": safe_get("-YMIN1-", "-4.0"),
         "ymax1": safe_get("-YMAX1-", "4.0"),
+        "auto1": bool(safe_get("-AUTO1-", False)),
         "ymin2": safe_get("-YMIN2-", "-4.0"),
         "ymax2": safe_get("-YMAX2-", "4.0"),
+        "auto2": bool(safe_get("-AUTO2-", False)),
     }
 
 def set_settings(s):
@@ -215,10 +217,14 @@ def set_settings(s):
             window["-YMIN1-"].update(s["ymin1"])
         if "ymax1" in s:
             window["-YMAX1-"].update(s["ymax1"])
+        if "auto1" in s:
+            window["-AUTO1-"].update(bool(s["auto1"]))
         if "ymin2" in s:
             window["-YMIN2-"].update(s["ymin2"])
         if "ymax2" in s:
             window["-YMAX2-"].update(s["ymax2"])
+        if "auto2" in s:
+            window["-AUTO2-"].update(bool(s["auto2"]))
         log("Settings loaded")
     except Exception as e:
         log(f"Load settings error: {e}")
@@ -401,7 +407,7 @@ def update_sliders():
     except Exception:
         pass
 
-def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, probe_key, show_tb=False):
+def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key, show_tb=False):
     canvas = window[canvas_key].TKCanvas
     canvas.delete("all")
     w = canvas.winfo_width() or 600
@@ -418,11 +424,35 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, probe_key, show_tb=
     canvas.create_line(margin, margin, margin, h - margin, fill="#888")
     canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
 
-    try:
-        ymin = float(safe_get(ymin_key, "-4.0"))
-        ymax = float(safe_get(ymax_key, "4.0"))
-    except Exception:
-        ymin, ymax = -4.0, 4.0
+    ydata = to_list(ydata)
+    auto = bool(safe_get(auto_key, False))
+
+    if auto and len(ydata) >= 2:
+        n = len(ydata)
+        visible = max(2, int(n / zoom_x))
+        max_start = max(0, n - visible)
+        start = int(pan_start * max_start)
+        end = min(n, start + visible)
+        view = ydata[start:end]
+        if len(view) >= 2:
+            dmin = min(view)
+            dmax = max(view)
+            span = dmax - dmin
+            if span == 0:
+                span = 1.0
+            ymin = dmin - 0.1 * span
+            ymax = dmax + 0.1 * span
+            window[ymin_key].update(f"{ymin:.3f}")
+            window[ymax_key].update(f"{ymax:.3f}")
+        else:
+            ymin, ymax = -4.0, 4.0
+    else:
+        try:
+            ymin = float(safe_get(ymin_key, "-4.0"))
+            ymax = float(safe_get(ymax_key, "4.0"))
+        except Exception:
+            ymin, ymax = -4.0, 4.0
+
     if ymax == ymin:
         ymax = ymin + 1.0
 
@@ -437,7 +467,6 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, probe_key, show_tb=
         tb = window["-TB-"].get()
         canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div  (zoom {zoom_x:.1f}x)", fill="#aaa", font=("Arial", 9))
 
-    ydata = to_list(ydata)
     if len(ydata) < 2:
         return
     n = len(ydata)
@@ -465,8 +494,8 @@ def draw_waveforms(data):
         return
     y0 = data.get("y0") if data.get("y0") is not None else data.get("y")
     y1 = data.get("y1")
-    plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", "-PROBE1-", show_tb=False)
-    plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", "-PROBE2-", show_tb=True)
+    plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", "-AUTO1-", "-PROBE1-", show_tb=False)
+    plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", "-AUTO2-", "-PROBE2-", show_tb=True)
 
 def on_wheel(event, canvas_key):
     global zoom_x, pan_start
@@ -624,7 +653,7 @@ while True:
 
     if event in ("-CH1-", "-CH2-", "-SCALE1-", "-SCALE2-", "-PROBE1-", "-PROBE2-", "-SRATE-", "-NSAMP-",
                  "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-",
-                 "-YMIN1-", "-YMAX1-", "-YMIN2-", "-YMAX2-"):
+                 "-YMIN1-", "-YMAX1-", "-AUTO1-", "-YMIN2-", "-YMAX2-", "-AUTO2-"):
         auto_save()
         last_save = now
         if last_data is not None:
