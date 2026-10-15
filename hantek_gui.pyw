@@ -84,9 +84,13 @@ layout = [
 
     [sg.HorizontalSeparator()],
     [sg.Text("CH1 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN1-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX1-", enable_events=True), sg.Checkbox("Auto", key="-AUTO1-", enable_events=True)],
+    [sg.Text("", key="-RAIL1H-", text_color="red", font=("Helvetica", 10, "bold"))],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE1-", expand_x=True)],
+    [sg.Text("", key="-RAIL1L-", text_color="red", font=("Helvetica", 10, "bold"))],
     [sg.Text("CH2 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN2-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX2-", enable_events=True), sg.Checkbox("Auto", key="-AUTO2-", enable_events=True)],
+    [sg.Text("", key="-RAIL2H-", text_color="red", font=("Helvetica", 10, "bold"))],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-", expand_x=True)],
+    [sg.Text("", key="-RAIL2L-", text_color="red", font=("Helvetica", 10, "bold"))],
     [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN-", expand_x=True, enable_events=True, disable_number_display=True, disabled=True)],
 
     [sg.Text("Log", key="-LOGLABEL-", visible=False)],
@@ -409,7 +413,7 @@ def update_sliders():
     except Exception:
         pass
 
-def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key, show_tb=False):
+def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key, rail_h_key, rail_l_key, show_tb=False):
     canvas = window[canvas_key].TKCanvas
     canvas.delete("all")
     w = canvas.winfo_width() or 600
@@ -458,6 +462,28 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key
     if ymax == ymin:
         ymax = ymin + 1.0
 
+    # Check for railing on visible data
+    railed_high = False
+    railed_low = False
+    if len(ydata) >= 2:
+        n = len(ydata)
+        visible = max(2, int(n / zoom_x))
+        max_start = max(0, n - visible)
+        start = int(pan_start * max_start)
+        end = min(n, start + visible)
+        view = ydata[start:end]
+        if len(view) >= 1:
+            dmin = min(view)
+            dmax = max(view)
+            eps = (ymax - ymin) * 0.001
+            if dmax >= ymax - eps:
+                railed_high = True
+            if dmin <= ymin + eps:
+                railed_low = True
+
+    window[rail_h_key].update("Railed High" if railed_high else "")
+    window[rail_l_key].update("Railed Low" if railed_low else "")
+
     probe = get_probe_factor(probe_key)
 
     for i in range(9):
@@ -496,8 +522,8 @@ def draw_waveforms(data):
         return
     y0 = data.get("y0") if data.get("y0") is not None else data.get("y")
     y1 = data.get("y1")
-    plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", "-AUTO1-", "-PROBE1-", show_tb=False)
-    plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", "-AUTO2-", "-PROBE2-", show_tb=True)
+    plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", "-AUTO1-", "-PROBE1-", "-RAIL1H-", "-RAIL1L-", show_tb=False)
+    plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", "-AUTO2-", "-PROBE2-", "-RAIL2H-", "-RAIL2L-", show_tb=True)
 
 def on_wheel(event, canvas_key):
     global zoom_x, pan_start
