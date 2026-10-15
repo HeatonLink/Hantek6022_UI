@@ -74,7 +74,7 @@ window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
 def log(msg):
     try:
         current = window["-LOG-"].get()
-        lines = (current + msg + "\n").splitlines()[-30:]
+        lines = (current + msg + "\n").splitlines()[-40:]
         window["-LOG-"].update("\n".join(lines) + "\n")
     except Exception:
         pass
@@ -117,15 +117,28 @@ def try_connect():
     try:
         log(f"Trying to connect to {selected_model}...")
         set_status("Status: Connecting...")
+
+        # Check for uninitialized devices and upload firmware
         try:
-            FirmwareUploader.init_all()
-        except Exception:
-            pass
+            uploader = FirmwareUploader()
+            pending = uploader.find_devs()
+            log(f"Uninitialized devices found: {len(pending) if pending else 0}")
+            if pending:
+                log("Uploading firmware...")
+                uploaded = FirmwareUploader.init_all()
+                log(f"Firmware upload result: {uploaded}")
+                if uploaded:
+                    time.sleep(2)
+        except Exception as e:
+            log(f"Firmware step error: {e}")
+
         dsos = get_dsos() or []
+        log(f"Initialized devices found: {len(dsos)}")
         if not dsos:
-            log("No device found")
+            log("No device found after firmware step")
             set_status("Status: No device")
             return False
+
         device = DSO6022BE(dsos[0])
         device.connect()
         connected = True
