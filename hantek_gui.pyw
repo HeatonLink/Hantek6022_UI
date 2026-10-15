@@ -46,7 +46,9 @@ timebase_col = [
 
 layout = [
     [sg.Menu(build_menu(), key="-MENU-")],
-    [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-")],
+    [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-"),
+     sg.Push(),
+     sg.Text("Status: Waiting", key="-STATUS-", justification="right")],
     [sg.HorizontalSeparator()],
 
     [sg.Column(channels_col, vertical_alignment="top"), sg.VSeparator(),
@@ -57,7 +59,6 @@ layout = [
     [sg.Button("Apply"), sg.Button("Acquire"), sg.Button("Run / Stop"), sg.Button("Force Trigger")],
 
     [sg.HorizontalSeparator()],
-    [sg.Text("Status: Waiting", key="-STATUS-")],
     [sg.Text("CH1: 0.00 V   CH2: 0.00 V")],
 
     [sg.HorizontalSeparator()],
