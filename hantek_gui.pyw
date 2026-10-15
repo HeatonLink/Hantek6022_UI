@@ -19,10 +19,13 @@ connected = False
 device = None
 last_action = 0
 
-menu_def = [["Options", ["Hantek 6022BE", "Hantek 6022BL"]]]
+def build_menu():
+    be = "\u2713 Hantek 6022BE" if selected_model == "Hantek 6022BE" else "Hantek 6022BE"
+    bl = "\u2713 Hantek 6022BL" if selected_model == "Hantek 6022BL" else "Hantek 6022BL"
+    return [["Options", ["Device", [be, bl]]]]
 
 layout = [
-    [sg.Menu(menu_def)],
+    [sg.Menu(build_menu(), key="-MENU-")],
     [sg.Text("HANTEK 6022", font=("Helvetica", 16, "bold"))],
     [sg.Text("Model: Hantek 6022BE", key="-MODEL-")],
     [sg.HorizontalSeparator()],
@@ -73,6 +76,24 @@ def log(msg):
     lines = (current + msg + "\n").splitlines()[-30:]
     window["-LOG-"].update("\n".join(lines) + "\n")
 
+def set_model(model):
+    global selected_model, connected, device
+    if model == selected_model:
+        return
+    selected_model = model
+    window["-DEV-"].update(value=selected_model)
+    window["-MODEL-"].update(f"Model: {selected_model}")
+    window["-MENU-"].update(menu_definition=build_menu())
+    log(f"Model set to {selected_model}")
+    if connected and device is not None:
+        try:
+            device.disconnect()
+        except Exception:
+            pass
+        connected = False
+        device = None
+        window["-STATUS-"].update("Status: Waiting")
+
 def try_connect():
     global connected, device
     if not DEVICE_OK:
@@ -106,7 +127,6 @@ def ping():
     if not connected or device is None:
         return
     try:
-        # Simple check that the device still responds
         _ = device.identify()
         log("Ping OK")
     except Exception as e:
@@ -121,33 +141,11 @@ while True:
     if event in (sg.WIN_CLOSED, "Exit"):
         break
 
-    if event == "Hantek 6022BE":
-        selected_model = "Hantek 6022BE"
-        window["-DEV-"].update(value=selected_model)
-        window["-MODEL-"].update(f"Model: {selected_model}")
-        log("Model set to Hantek 6022BE")
-        if connected:
-            try:
-                device.disconnect()
-            except Exception:
-                pass
-            connected = False
-            device = None
-            window["-STATUS-"].update("Status: Waiting")
+    if event in ("Hantek 6022BE", "\u2713 Hantek 6022BE"):
+        set_model("Hantek 6022BE")
 
-    if event == "Hantek 6022BL":
-        selected_model = "Hantek 6022BL"
-        window["-DEV-"].update(value=selected_model)
-        window["-MODEL-"].update(f"Model: {selected_model}")
-        log("Model set to Hantek 6022BL")
-        if connected:
-            try:
-                device.disconnect()
-            except Exception:
-                pass
-            connected = False
-            device = None
-            window["-STATUS-"].update("Status: Waiting")
+    if event in ("Hantek 6022BL", "\u2713 Hantek 6022BL"):
+        set_model("Hantek 6022BL")
 
     if event == "Connect":
         try_connect()
