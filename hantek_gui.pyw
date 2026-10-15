@@ -75,12 +75,10 @@ window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
 def log(msg):
     try:
         current = window["-LOG-"].get()
-        if not current.endswith("\n"):
-            current += "\n"
-        new_text = current + msg + "\n\n"
+        new_text = msg + "\n\n" + current
         lines = new_text.splitlines(keepends=True)
         if len(lines) > 40:
-            new_text = "".join(lines[-40:])
+            new_text = "".join(lines[:40])
         window["-LOG-"].update(new_text)
     except Exception:
         pass
