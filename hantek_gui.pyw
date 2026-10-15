@@ -23,8 +23,8 @@ menu_def = [["Options", ["Device", ["Hantek 6022BE", "Hantek 6022BL"], "Show Log
 
 channels_col = [
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
-    [sg.Checkbox("CH1", default=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
-    [sg.Checkbox("CH2", default=False), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
+    [sg.Checkbox("CH1", default=True, key="-CH1-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
+    [sg.Checkbox("CH2", default=False, key="-CH2-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
 ]
 
 trigger_col = [
@@ -55,14 +55,14 @@ layout = [
      sg.Column(timebase_col, vertical_alignment="top")],
 
     [sg.HorizontalSeparator()],
-    [sg.Button("Apply"), sg.Button("Acquire"), sg.Button("Run / Stop"), sg.Button("Force Trigger")],
+    [sg.Button("Apply"), sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop"), sg.Button("Force Trigger")],
 
     [sg.HorizontalSeparator()],
-    [sg.Text("CH1: 0.00 V   CH2: 0.00 V")],
+    [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-")],
 
     [sg.HorizontalSeparator()],
     [sg.Text("Waveform")],
-    [sg.Canvas(size=(600, 250), background_color="black")],
+    [sg.Canvas(size=(600, 250), background_color="black", key="-WAVE-")],
     [sg.Text("FFT")],
     [sg.Canvas(size=(600, 150), background_color="black")],
 
@@ -92,6 +92,7 @@ def toggle_log():
 def set_status(text):
     window["-STATUS-"].update(text)
     window["-CONN-"].update(disabled=connected)
+    window["-ACQ-"].update(disabled=not connected)
 
 def set_model(model):
     global selected_model, connected, device
@@ -164,6 +165,30 @@ def do_disconnect():
     set_status("Status: Disconnected")
     log("Disconnected")
 
+def do_acquire():
+    if not connected or device is None:
+        log("Not connected")
+        return
+    try:
+        log("Acquiring...")
+        channels = []
+        if window["-CH1-"].get():
+            channels.append(0)
+        if window["-CH2-"].get():
+            channels.append(1)
+        if not channels:
+            channels = [0]
+        data = device.query_waveform(channels)
+        log(f"Acquired {len(data.get('y', data.get('y0', [])))} samples")
+        # Simple readout of mean if available
+        y = data.get("y") or data.get("y0") or []
+        if y:
+            mean = sum(y) / len(y)
+            window["-READOUT-"].update(f"CH1: {mean:.3f} V")
+        log("Acquire done")
+    except Exception as e:
+        log(f"Acquire failed: {e}")
+
 def ping():
     global connected, device
     if not connected or device is None:
@@ -200,6 +225,9 @@ while True:
 
     if event == "-DISC-":
         do_disconnect()
+
+    if event == "-ACQ-":
+        do_acquire()
 
     # Only ping while connected (no auto-connect)
     now = time.time()
