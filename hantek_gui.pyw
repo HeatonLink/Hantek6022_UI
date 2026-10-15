@@ -66,15 +66,19 @@ layout = [
 
     [sg.HorizontalSeparator()],
     [sg.Text("CH1 Waveform")],
-    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE1-")],
+    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE1-", expand_x=True)],
     [sg.Text("CH2 Waveform")],
-    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-")],
+    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-", expand_x=True)],
 
     [sg.Text("Log", key="-LOGLABEL-", visible=False)],
-    [sg.Multiline("GUI ready.\n\n", size=(70, 6), key="-LOG-", visible=False)],
+    [sg.Multiline("GUI ready.\n\n", size=(70, 6), key="-LOG-", visible=False, expand_x=True)],
 ]
 
 window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
+
+# Set current size as minimum
+win_size = window.size
+window.TKroot.minsize(win_size[0], win_size[1])
 
 def log(msg):
     try:
