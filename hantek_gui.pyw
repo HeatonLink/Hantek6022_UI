@@ -24,21 +24,37 @@ Notes:
 License: Based on the open-source pyhantek6022 project (BSD-3-Clause).
 """
 
-import logging
-import time
 import sys
+import traceback
+import time
+import logging
+from io import StringIO
 
+# --- Always-safe imports ---
 try:
     import FreeSimpleGUI as sg
 except ImportError:
-    print("FreeSimpleGUI is required. Install with: pip install FreeSimpleGUI")
+    # Minimal fallback so we can still show something
+    import tkinter as tk
+    from tkinter import messagebox
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror("Missing dependency", "FreeSimpleGUI is required.\n\npip install FreeSimpleGUI")
     sys.exit(1)
 
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
+try:
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    from matplotlib.figure import Figure
+    MATPLOTLIB_OK = True
+except ImportError:
+    MATPLOTLIB_OK = False
 
+# Optional device library
 try:
     from labdevices.oscilloscope import (
         OscilloscopeRunMode,
@@ -47,16 +63,35 @@ try:
     )
     from pyhantek6022.dso6022be import DSO6022BE, get_dsos
     from pyhantek6022.firmwareupload import FirmwareUploader
-except ImportError:
-    print("pyhantek6022 is required. Install with: pip install 'pyhantek6022[gui]'")
-    sys.exit(1)
+    DEVICE_LIB_OK = True
+except ImportError as e:
+    DEVICE_LIB_OK = False
+    DEVICE_LIB_ERROR = str(e)
+
+
+class GUILogHandler(logging.Handler):
+    """Send log records to the GUI multiline log."""
+    def __init__(self, window, key="-LOG-"):
+        super().__init__()
+        self.window = window
+        self.key = key
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            current = self.window[self.key].get()
+            # Keep last ~200 lines
+            lines = (current + "\n" + msg).splitlines()[-200:]
+            self.window[self.key].update("\n".join(lines))
+            self.window.refresh()
+        except Exception:
+            pass
 
 
 class HantekGUI:
     def __init__(self):
-        self._logger = logging.getLogger(__name__)
-        self._logger.addHandler(logging.StreamHandler())
-        self._logger.setLevel(logging.INFO)
+        self._logger = logging.getLogger("HantekGUI")
+        self._logger.setLevel(logging.DEBUG)
 
         self._probe_ratios = [1, 10, 100]
         self._channel_scales = [0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0]
@@ -75,170 +110,95 @@ class HantekGUI:
 
         sg.theme("DarkAmber")
 
-        layout = [
+        # Layout with log at the bottom spanning full width
+        left_col = [
+            [sg.Text("Device")],
             [
-                sg.Column(
-                    [
-                        [sg.Text("Device")],
-                        [
-                            sg.Combo([], key="cmbDevice", size=(40, 1), readonly=True),
-                            sg.Button("Refresh", key="btnRefresh"),
-                        ],
-                        [
-                            sg.Button("Connect", key="btnConnect"),
-                            sg.Button("Disconnect", key="btnDisconnect"),
-                        ],
-                        [sg.HorizontalSeparator()],
-                        [
-                            sg.Text("Run mode"),
-                            sg.Combo(
-                                ["RUN", "STOP", "SINGLE"],
-                                default_value="RUN",
-                                key="cmbRunMode",
-                                readonly=True,
-                                size=(12, 1),
-                            ),
-                        ],
-                        [
-                            sg.Text("Sweep mode"),
-                            sg.Combo(
-                                ["AUTO", "NORMAL", "SINGLE"],
-                                default_value="AUTO",
-                                key="cmbSweepMode",
-                                readonly=True,
-                                size=(12, 1),
-                            ),
-                        ],
-                        [
-                            sg.Text("Trigger mode"),
-                            sg.Combo(
-                                ["EDGE", "PULSE", "SLOPE"],
-                                default_value="EDGE",
-                                key="cmbTriggerMode",
-                                readonly=True,
-                                size=(12, 1),
-                            ),
-                        ],
-                        [
-                            sg.Text("Trigger source"),
-                            sg.Combo(
-                                ["CH1", "CH2"],
-                                default_value="CH1",
-                                key="cmbTriggerSource",
-                                readonly=True,
-                                size=(12, 1),
-                            ),
-                        ],
-                        [
-                            sg.Text("Trigger slope"),
-                            sg.Combo(
-                                ["positive", "negative", "both"],
-                                default_value="positive",
-                                key="cmbTriggerSlope",
-                                readonly=True,
-                                size=(12, 1),
-                            ),
-                        ],
-                        [
-                            sg.Text("Trigger level [V]"),
-                            sg.InputText("0.0", key="txtTriggerLevel", size=(12, 1)),
-                        ],
-                        [
-                            sg.Text("Trigger position"),
-                            sg.InputText("0.5", key="txtTriggerPosition", size=(12, 1)),
-                        ],
-                        [
-                            sg.Checkbox("Smooth trigger", key="chkTriggerSmooth", default=False)
-                        ],
-                        [sg.HorizontalSeparator()],
-                        [
-                            sg.Checkbox("CH1", key="chkCh0", default=True),
-                            sg.Text("Scale"),
-                            sg.Combo(
-                                self._channel_scales,
-                                default_value=1.0,
-                                key="cmbScale0",
-                                readonly=True,
-                                size=(8, 1),
-                            ),
-                            sg.Text("Probe"),
-                            sg.Combo(
-                                self._probe_ratios,
-                                default_value=1,
-                                key="cmbProbe0",
-                                readonly=True,
-                                size=(8, 1),
-                            ),
-                        ],
-                        [
-                            sg.Checkbox("CH2", key="chkCh1", default=False),
-                            sg.Text("Scale"),
-                            sg.Combo(
-                                self._channel_scales,
-                                default_value=1.0,
-                                key="cmbScale1",
-                                readonly=True,
-                                size=(8, 1),
-                            ),
-                            sg.Text("Probe"),
-                            sg.Combo(
-                                self._probe_ratios,
-                                default_value=1,
-                                key="cmbProbe1",
-                                readonly=True,
-                                size=(8, 1),
-                            ),
-                        ],
-                        [
-                            sg.Text("Timebase [s/div]"),
-                            sg.Combo(
-                                self._timebase_scales,
-                                default_value=1e-3,
-                                key="cmbTimebase",
-                                readonly=True,
-                                size=(12, 1),
-                            ),
-                        ],
-                        [
-                            sg.Text("Averages"),
-                            sg.Combo(
-                                [1, 2, 4, 8, 16, 32],
-                                default_value=1,
-                                key="cmbAverages",
-                                readonly=True,
-                                size=(8, 1),
-                            ),
-                        ],
-                        [
-                            sg.Checkbox("Show average", key="chkShowAverage", default=True),
-                            sg.Checkbox("Show std dev", key="chkShowStd", default=False),
-                        ],
-                        [sg.HorizontalSeparator()],
-                        [
-                            sg.Button("Apply", key="btnApply"),
-                            sg.Button("Acquire", key="btnAcquire"),
-                            sg.Button("Start Continuous", key="btnStart"),
-                            sg.Button("Force Trigger", key="btnForceTrigger"),
-                        ],
-                        [
-                            sg.Text("Status:"),
-                            sg.Text("Not connected", key="txtStatus", size=(45, 2)),
-                        ],
-                        [
-                            sg.Text("Stats:"),
-                            sg.Text("-", key="txtTraceStats", size=(45, 5)),
-                        ],
-                    ],
-                    vertical_alignment="t",
-                ),
-                sg.Column(
-                    [
-                        [sg.Canvas(key="canvTrace", size=(900, 320))],
-                        [sg.Canvas(key="canvFFT", size=(900, 280))],
-                    ],
-                    vertical_alignment="t",
-                ),
-            ]
+                sg.Combo([], key="cmbDevice", size=(40, 1), readonly=True),
+                sg.Button("Refresh", key="btnRefresh"),
+            ],
+            [
+                sg.Button("Connect", key="btnConnect"),
+                sg.Button("Disconnect", key="btnDisconnect"),
+            ],
+            [sg.HorizontalSeparator()],
+            [
+                sg.Text("Run mode"),
+                sg.Combo(["RUN", "STOP", "SINGLE"], default_value="RUN", key="cmbRunMode", readonly=True, size=(12, 1)),
+            ],
+            [
+                sg.Text("Sweep mode"),
+                sg.Combo(["AUTO", "NORMAL", "SINGLE"], default_value="AUTO", key="cmbSweepMode", readonly=True, size=(12, 1)),
+            ],
+            [
+                sg.Text("Trigger mode"),
+                sg.Combo(["EDGE", "PULSE", "SLOPE"], default_value="EDGE", key="cmbTriggerMode", readonly=True, size=(12, 1)),
+            ],
+            [
+                sg.Text("Trigger source"),
+                sg.Combo(["CH1", "CH2"], default_value="CH1", key="cmbTriggerSource", readonly=True, size=(12, 1)),
+            ],
+            [
+                sg.Text("Trigger slope"),
+                sg.Combo(["positive", "negative", "both"], default_value="positive", key="cmbTriggerSlope", readonly=True, size=(12, 1)),
+            ],
+            [
+                sg.Text("Trigger level [V]"),
+                sg.InputText("0.0", key="txtTriggerLevel", size=(12, 1)),
+            ],
+            [
+                sg.Text("Trigger position"),
+                sg.InputText("0.5", key="txtTriggerPosition", size=(12, 1)),
+            ],
+            [sg.Checkbox("Smooth trigger", key="chkTriggerSmooth", default=False)],
+            [sg.HorizontalSeparator()],
+            [
+                sg.Checkbox("CH1", key="chkCh0", default=True),
+                sg.Text("Scale"),
+                sg.Combo(self._channel_scales, default_value=1.0, key="cmbScale0", readonly=True, size=(8, 1)),
+                sg.Text("Probe"),
+                sg.Combo(self._probe_ratios, default_value=1, key="cmbProbe0", readonly=True, size=(8, 1)),
+            ],
+            [
+                sg.Checkbox("CH2", key="chkCh1", default=False),
+                sg.Text("Scale"),
+                sg.Combo(self._channel_scales, default_value=1.0, key="cmbScale1", readonly=True, size=(8, 1)),
+                sg.Text("Probe"),
+                sg.Combo(self._probe_ratios, default_value=1, key="cmbProbe1", readonly=True, size=(8, 1)),
+            ],
+            [
+                sg.Text("Timebase [s/div]"),
+                sg.Combo(self._timebase_scales, default_value=1e-3, key="cmbTimebase", readonly=True, size=(12, 1)),
+            ],
+            [
+                sg.Text("Averages"),
+                sg.Combo([1, 2, 4, 8, 16, 32], default_value=1, key="cmbAverages", readonly=True, size=(8, 1)),
+            ],
+            [
+                sg.Checkbox("Show average", key="chkShowAverage", default=True),
+                sg.Checkbox("Show std dev", key="chkShowStd", default=False),
+            ],
+            [sg.HorizontalSeparator()],
+            [
+                sg.Button("Apply", key="btnApply"),
+                sg.Button("Acquire", key="btnAcquire"),
+                sg.Button("Start Continuous", key="btnStart"),
+                sg.Button("Force Trigger", key="btnForceTrigger"),
+            ],
+            [sg.Text("Status:"), sg.Text("Not connected", key="txtStatus", size=(40, 2))],
+            [sg.Text("Stats:"), sg.Text("-", key="txtTraceStats", size=(40, 4))],
+        ]
+
+        right_col = [
+            [sg.Canvas(key="canvTrace", size=(900, 300))],
+            [sg.Canvas(key="canvFFT", size=(900, 260))],
+        ]
+
+        layout = [
+            [sg.Column(left_col, vertical_alignment="t"), sg.Column(right_col, vertical_alignment="t")],
+            [sg.HorizontalSeparator()],
+            [sg.Text("Log:")],
+            [sg.Multiline(size=(140, 10), key="-LOG-", autoscroll=True, disabled=True, font=("Consolas", 9), background_color="#1e1e1e", text_color="#d4d4d4")],
         ]
 
         self._window = sg.Window(
@@ -246,18 +206,50 @@ class HantekGUI:
             layout,
             finalize=True,
             resizable=True,
-            location=(50, 50),
+            location=(30, 30),
         )
 
-        self._figures = {
-            "trace": self._init_figure("canvTrace", "Time [s]", "Voltage [V]", "Waveform"),
-            "fft": self._init_figure("canvFFT", "Frequency bin", "Magnitude", "FFT"),
-        }
+        # Attach GUI log handler
+        gui_handler = GUILogHandler(self._window)
+        gui_handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)-8s  %(message)s", "%H:%M:%S"))
+        self._logger.addHandler(gui_handler)
+        self._logger.propagate = False
 
+        self.log("GUI started.")
+
+        if not DEVICE_LIB_OK:
+            self.log(f"ERROR: Device library not available: {DEVICE_LIB_ERROR}", level="error")
+            self.log("Install with: pip install 'pyhantek6022[gui]'", level="error")
+            self._window["txtStatus"].update("Library missing - see log")
+        else:
+            self.log("Device library loaded OK.")
+
+        if not MATPLOTLIB_OK:
+            self.log("WARNING: matplotlib not available - plots will not work.", level="warning")
+        else:
+            try:
+                self._figures = {
+                    "trace": self._init_figure("canvTrace", "Time [s]", "Voltage [V]", "Waveform"),
+                    "fft": self._init_figure("canvFFT", "Frequency bin", "Magnitude", "FFT"),
+                }
+                self.log("Plots initialized.")
+            except Exception as e:
+                self.log(f"Plot init failed: {e}", level="error")
+                self._figures = {}
+
+        # Initial scan
         self._refresh_devices()
 
+    def log(self, message, level="info"):
+        if level == "error":
+            self._logger.error(message)
+        elif level == "warning":
+            self._logger.warning(message)
+        else:
+            self._logger.info(message)
+
     def _init_figure(self, canvas_name, xlabel, ylabel, title):
-        fig = Figure(figsize=(9, 3.2), dpi=100)
+        fig = Figure(figsize=(9, 3.0), dpi=100)
         ax = fig.add_subplot(111)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -271,47 +263,70 @@ class HantekGUI:
         return {"figure": fig, "axis": ax, "fig_agg": fig_agg}
 
     def _refresh_devices(self):
-        self._window["txtStatus"].update("Scanning devices & uploading firmware if needed...")
+        if not DEVICE_LIB_OK:
+            self.log("Cannot scan - device library missing.", level="error")
+            return
+
+        self.log("Scanning devices & uploading firmware if needed...")
+        self._window["txtStatus"].update("Scanning...")
         self._window.refresh()
 
         try:
             uploaded = FirmwareUploader.init_all()
             if uploaded:
+                self.log(f"Firmware uploaded to {len(uploaded)} device(s). Waiting for re-enumeration...")
                 time.sleep(2.5)
+            else:
+                self.log("No firmware upload needed.")
         except Exception as e:
-            self._logger.warning(f"Firmware upload: {e}")
+            self.log(f"Firmware upload error: {e}", level="error")
+            self.log(traceback.format_exc(), level="error")
 
-        self._devices = get_dsos() or []
-        self._device_labels = []
+        try:
+            self._devices = get_dsos() or []
+            self._device_labels = []
 
-        for i, dev in enumerate(self._devices):
-            try:
-                dso = DSO6022BE(dev)
-                ident = dso.identify() or {}
-                label = f"{ident.get('manufacturer', 'Hantek')} {ident.get('product', '6022')} SN:{ident.get('serial', '?')}"
-            except Exception:
-                label = f"Device {i}"
-            self._device_labels.append(label)
+            for i, dev in enumerate(self._devices):
+                try:
+                    dso = DSO6022BE(dev)
+                    ident = dso.identify() or {}
+                    label = f"{ident.get('manufacturer', 'Hantek')} {ident.get('product', '6022')} SN:{ident.get('serial', '?')}"
+                except Exception as e:
+                    label = f"Device {i} ({e})"
+                self._device_labels.append(label)
 
-        self._window["cmbDevice"].update(
-            values=self._device_labels,
-            value=self._device_labels[0] if self._device_labels else None,
-        )
-        self._window["txtStatus"].update(f"Found {len(self._devices)} device(s)")
+            self._window["cmbDevice"].update(
+                values=self._device_labels,
+                value=self._device_labels[0] if self._device_labels else None,
+            )
+            self.log(f"Found {len(self._devices)} initialized device(s).")
+            self._window["txtStatus"].update(f"Found {len(self._devices)} device(s)")
+        except Exception as e:
+            self.log(f"Device scan failed: {e}", level="error")
+            self.log(traceback.format_exc(), level="error")
+            self._window["txtStatus"].update("Scan failed - see log")
 
     def _connect_selected(self):
+        if not DEVICE_LIB_OK or self._device is not None:
+            return
+
         sel = self._window["cmbDevice"].get()
-        if sel not in self._device_labels:
+        if not sel or sel not in self._device_labels:
+            self.log("No device selected.", level="warning")
             self._window["txtStatus"].update("No device selected")
             return
 
         idx = self._device_labels.index(sel)
         try:
+            self.log(f"Connecting to {sel}...")
             self._device = DSO6022BE(self._devices[idx])
             self._device.connect()
+            self.log("Connected.")
             self._window["txtStatus"].update(f"Connected: {sel}")
             self._apply_settings()
         except Exception as e:
+            self.log(f"Connect failed: {e}", level="error")
+            self.log(traceback.format_exc(), level="error")
             self._window["txtStatus"].update(f"Connect failed: {e}")
             self._device = None
 
@@ -319,16 +334,19 @@ class HantekGUI:
         if self._device is not None:
             try:
                 self._device.disconnect()
-            except Exception:
-                pass
+                self.log("Disconnected.")
+            except Exception as e:
+                self.log(f"Disconnect error: {e}", level="warning")
             self._device = None
         self._running = False
         self._average_buffer.clear()
         self._last_settings = None
         self._window["txtStatus"].update("Disconnected")
+        self._window["btnStart"].update("Start Continuous")
 
     def _apply_settings(self):
         if self._device is None:
+            self.log("Apply: not connected.", level="warning")
             return
 
         ch0 = self._window["chkCh0"].get()
@@ -364,8 +382,11 @@ class HantekGUI:
 
             self._averages = int(self._window["cmbAverages"].get())
             self._average_buffer.clear()
+            self.log("Settings applied.")
             self._window["txtStatus"].update("Settings applied")
         except Exception as e:
+            self.log(f"Apply failed: {e}", level="error")
+            self.log(traceback.format_exc(), level="error")
             self._window["txtStatus"].update(f"Apply failed: {e}")
 
     def _get_requested_channels(self):
@@ -379,6 +400,8 @@ class HantekGUI:
         return req[0] if len(req) == 1 else tuple(req)
 
     def _average_trace(self, data):
+        if np is None:
+            return data
         self._average_buffer.append(data)
         if len(self._average_buffer) > self._averages:
             self._average_buffer = self._average_buffer[-self._averages:]
@@ -401,6 +424,8 @@ class HantekGUI:
         return out
 
     def _plot_trace(self, data):
+        if not self._figures.get("trace"):
+            return
         ax = self._figures["trace"]["axis"]
         ax.clear()
         ax.set_xlabel("Time [s]")
@@ -408,22 +433,17 @@ class HantekGUI:
         ax.set_title("Waveform")
         ax.grid(True, alpha=0.3)
 
-        x = np.asarray(data.get("x", []))
+        x = np.asarray(data.get("x", [])) if np is not None else data.get("x", [])
         show_avg = self._window["chkShowAverage"].get()
         show_std = self._window["chkShowStd"].get()
 
         if "y" in data:
-            y = np.asarray(data["y"])
+            y = np.asarray(data["y"]) if np is not None else data["y"]
             ax.plot(x, y, label="Trace", linewidth=1.0)
             if self._averages > 1 and "y_trace_avg" in data:
                 ax.plot(x, data["y_trace_avg"], label="Average", linewidth=1.5)
                 if show_std and "y_trace_std" in data:
-                    ax.fill_between(
-                        x,
-                        data["y_trace_avg"] - data["y_trace_std"],
-                        data["y_trace_avg"] + data["y_trace_std"],
-                        alpha=0.15,
-                    )
+                    ax.fill_between(x, data["y_trace_avg"] - data["y_trace_std"], data["y_trace_avg"] + data["y_trace_std"], alpha=0.15)
         else:
             colors = ["#FFD700", "#1E90FF"]
             for ch in (0, 1):
@@ -446,6 +466,8 @@ class HantekGUI:
         self._figures["trace"]["fig_agg"].draw()
 
     def _plot_fft(self, data):
+        if not self._figures.get("fft"):
+            return
         ax = self._figures["fft"]["axis"]
         ax.clear()
         ax.set_xlabel("Frequency bin")
@@ -453,7 +475,7 @@ class HantekGUI:
         ax.set_title("FFT")
         ax.grid(True, alpha=0.3)
 
-        if "fft" in data:
+        if "fft" in data and np is not None:
             for key, value in data["fft"].items():
                 if key.endswith("_real") or key.endswith("_mag"):
                     ax.plot(np.asarray(value), label=key, linewidth=1.0)
@@ -465,21 +487,22 @@ class HantekGUI:
         lines = []
         if "means" in data:
             for k, v in data["means"].items():
-                if isinstance(v, (int, float, np.floating)):
+                if isinstance(v, (int, float)) or (np is not None and isinstance(v, np.floating)):
                     lines.append(f"{k}: {float(v):.4g}")
         self._window["txtTraceStats"].update("\n".join(lines[:8]) or "-")
 
     def _acquire_once(self):
         if self._device is None:
+            self.log("Acquire: not connected.", level="warning")
             self._window["txtStatus"].update("Not connected")
             return
 
         try:
             channels = self._get_requested_channels()
-            stats = ["means", "fft"] if True else None
-            data = self._device.query_waveform(channels, stats=stats)
+            data = self._device.query_waveform(channels, stats=["means", "fft"])
             if data is None:
-                self._window["txtStatus"].update("No data returned")
+                self.log("No data returned from device.", level="warning")
+                self._window["txtStatus"].update("No data")
                 return
 
             if self._averages > 1:
@@ -488,43 +511,59 @@ class HantekGUI:
             self._plot_trace(data)
             self._plot_fft(data)
             self._update_stats(data)
+            self.log("Acquired OK.")
             self._window["txtStatus"].update("Acquired")
         except Exception as e:
+            self.log(f"Acquire error: {e}", level="error")
+            self.log(traceback.format_exc(), level="error")
             self._window["txtStatus"].update(f"Acquire error: {e}")
-            self._logger.exception("Acquire failed")
 
     def run(self):
+        self.log("Entering main loop. Ready.")
         while True:
-            event, values = self._window.read(timeout=100 if self._running else None)
-
-            if event in (sg.WIN_CLOSED, "Exit"):
+            try:
+                event, values = self._window.read(timeout=120 if self._running else None)
+            except Exception as e:
+                self.log(f"Window read error: {e}", level="error")
                 break
 
-            if event == "btnRefresh":
-                self._refresh_devices()
-            elif event == "btnConnect":
-                self._connect_selected()
-            elif event == "btnDisconnect":
-                self._disconnect_selected()
-            elif event == "btnApply":
-                self._apply_settings()
-            elif event == "btnAcquire":
-                self._acquire_once()
-            elif event == "btnStart":
-                self._running = not self._running
-                self._window["btnStart"].update("Stop Continuous" if self._running else "Start Continuous")
-                if self._running:
-                    self._window["txtStatus"].update("Continuous acquisition running")
-            elif event == "btnForceTrigger":
-                if self._device is not None:
-                    try:
-                        self._device.force_trigger()
-                        self._window["txtStatus"].update("Trigger forced")
-                    except Exception as e:
-                        self._window["txtStatus"].update(f"Force trigger failed: {e}")
+            if event in (sg.WIN_CLOSED, "Exit"):
+                self.log("Window closed.")
+                break
 
-            if self._running and self._device is not None:
-                self._acquire_once()
+            try:
+                if event == "btnRefresh":
+                    self._refresh_devices()
+                elif event == "btnConnect":
+                    self._connect_selected()
+                elif event == "btnDisconnect":
+                    self._disconnect_selected()
+                elif event == "btnApply":
+                    self._apply_settings()
+                elif event == "btnAcquire":
+                    self._acquire_once()
+                elif event == "btnStart":
+                    self._running = not self._running
+                    self._window["btnStart"].update("Stop Continuous" if self._running else "Start Continuous")
+                    self.log("Continuous " + ("started" if self._running else "stopped"))
+                    if self._running:
+                        self._window["txtStatus"].update("Continuous acquisition running")
+                elif event == "btnForceTrigger":
+                    if self._device is not None:
+                        try:
+                            self._device.force_trigger()
+                            self.log("Trigger forced.")
+                            self._window["txtStatus"].update("Trigger forced")
+                        except Exception as e:
+                            self.log(f"Force trigger failed: {e}", level="error")
+                    else:
+                        self.log("Force trigger: not connected.", level="warning")
+
+                if self._running and self._device is not None:
+                    self._acquire_once()
+            except Exception as e:
+                self.log(f"Event handler error: {e}", level="error")
+                self.log(traceback.format_exc(), level="error")
 
         self._disconnect_selected()
         self._window.close()
@@ -535,8 +574,12 @@ def main():
         app = HantekGUI()
         app.run()
     except Exception as e:
-        print(f"Fatal error: {e}", file=sys.stderr)
-        sg.popup_error(f"Fatal error:\n{e}")
+        # Last-resort: try to show a popup if window failed completely
+        try:
+            sg.popup_error(f"Fatal startup error:\n{e}\n\n{traceback.format_exc()}", title="Hantek GUI Crash")
+        except Exception:
+            print(f"Fatal error: {e}", file=sys.stderr)
+            traceback.print_exc()
         sys.exit(1)
 
 
