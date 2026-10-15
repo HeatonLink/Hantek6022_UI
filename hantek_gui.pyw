@@ -65,10 +65,10 @@ layout = [
     [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-")],
 
     [sg.HorizontalSeparator()],
-    [sg.Text("Waveform")],
-    [sg.Canvas(size=(600, 250), background_color="black", key="-WAVE-")],
-    [sg.Text("FFT")],
-    [sg.Canvas(size=(600, 150), background_color="black")],
+    [sg.Text("CH1 Waveform")],
+    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE1-")],
+    [sg.Text("CH2 Waveform")],
+    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-")],
 
     [sg.Text("Log", key="-LOGLABEL-", visible=False)],
     [sg.Multiline("GUI ready.\n\n", size=(70, 6), key="-LOG-", visible=False)],
@@ -245,7 +245,45 @@ def to_list(arr):
     except Exception:
         return []
 
-def plot_trace(canvas, ydata, color, w, h, margin):
+def parse_scale(s):
+    try:
+        if "mV" in s:
+            return float(s.replace("mV", "")) / 1000
+        return float(s.replace("V", ""))
+    except Exception:
+        return 1.0
+
+def plot_trace(canvas_key, ydata, color, scale_key):
+    canvas = window[canvas_key].TKCanvas
+    canvas.delete("all")
+    w = canvas.winfo_width() or 600
+    h = canvas.winfo_height() or 180
+    margin = 40
+
+    # Grid
+    for i in range(1, 8):
+        y = margin + int((h - 2 * margin) * i / 8)
+        canvas.create_line(margin, y, w - margin, y, fill="#333", dash=(2, 4))
+    for i in range(1, 10):
+        x = margin + int((w - 2 * margin) * i / 10)
+        canvas.create_line(x, margin, x, h - margin, fill="#333", dash=(2, 4))
+
+    # Axes
+    canvas.create_line(margin, margin, margin, h - margin, fill="#888")
+    canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
+
+    # Voltage scale
+    scale_v = parse_scale(window[scale_key].get())
+    for i in range(9):
+        y = margin + int((h - 2 * margin) * i / 8)
+        v = (4 - i) * scale_v
+        canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
+
+    # Time scale
+    tb = window["-TB-"].get()
+    canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div", fill="#aaa", font=("Arial", 9))
+
+    # Plot
     ydata = to_list(ydata)
     if len(ydata) < 2:
         return
@@ -261,49 +299,11 @@ def plot_trace(canvas, ydata, color, w, h, margin):
     if len(pts) >= 4:
         canvas.create_line(pts, fill=color, width=1)
 
-def draw_waveform(data):
-    canvas = window["-WAVE-"].TKCanvas
-    canvas.delete("all")
-    w = canvas.winfo_width() or 600
-    h = canvas.winfo_height() or 250
-    margin = 40
-
-    # Grid
-    for i in range(1, 8):
-        y = margin + int((h - 2 * margin) * i / 8)
-        canvas.create_line(margin, y, w - margin, y, fill="#333", dash=(2, 4))
-    for i in range(1, 10):
-        x = margin + int((w - 2 * margin) * i / 10)
-        canvas.create_line(x, margin, x, h - margin, fill="#333", dash=(2, 4))
-
-    # Axes
-    canvas.create_line(margin, margin, margin, h - margin, fill="#888")
-    canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
-
-    # Voltage scale (left) - use CH1 scale
-    scale_v = 1.0
-    try:
-        s = window["-SCALE1-"].get()
-        if "mV" in s:
-            scale_v = float(s.replace("mV", "")) / 1000
-        else:
-            scale_v = float(s.replace("V", ""))
-    except Exception:
-        pass
-    for i in range(9):
-        y = margin + int((h - 2 * margin) * i / 8)
-        v = (4 - i) * scale_v
-        canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
-
-    # Time scale (bottom)
-    tb = window["-TB-"].get()
-    canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div", fill="#aaa", font=("Arial", 9))
-
-    # Plot CH1 (yellow) and CH2 (cyan)
+def draw_waveforms(data):
     y0 = data.get("y0") if data.get("y0") is not None else data.get("y")
     y1 = data.get("y1")
-    plot_trace(canvas, y0, "#FFD700", w, h, margin)
-    plot_trace(canvas, y1, "#00FFFF", w, h, margin)
+    plot_trace("-WAVE1-", y0, "#FFD700", "-SCALE1-")
+    plot_trace("-WAVE2-", y1, "#00FFFF", "-SCALE2-")
 
 def do_acquire():
     if not connected or device is None:
@@ -325,7 +325,7 @@ def do_acquire():
         m0 = sum(y0) / len(y0) if len(y0) > 0 else 0.0
         m1 = sum(y1) / len(y1) if len(y1) > 0 else 0.0
         window["-READOUT-"].update(f"CH1: {m0:.3f} V   CH2: {m1:.3f} V")
-        draw_waveform(data)
+        draw_waveforms(data)
         log("Acquire done")
     except Exception as e:
         log(f"Acquire failed: {e}")
