@@ -18,11 +18,13 @@ selected_model = "Hantek 6022BE"
 connected = False
 device = None
 last_action = 0
+log_visible = False
 
 def build_menu():
     be = "\u2713 Hantek 6022BE" if selected_model == "Hantek 6022BE" else "Hantek 6022BE"
     bl = "\u2713 Hantek 6022BL" if selected_model == "Hantek 6022BL" else "Hantek 6022BL"
-    return [["Options", ["Device", [be, bl]]]]
+    log_item = "\u2713 Show Log" if log_visible else "Show Log"
+    return [["Options", ["Device", [be, bl], log_item]]]
 
 channels_col = [
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
@@ -67,9 +69,9 @@ layout = [
     [sg.Text("FFT")],
     [sg.Canvas(size=(600, 150), background_color="black")],
 
-    [sg.HorizontalSeparator()],
-    [sg.Text("Log")],
-    [sg.Multiline("GUI ready. Default model: Hantek 6022BE\n", size=(70, 6), key="-LOG-")],
+    [sg.HorizontalSeparator(key="-LOGSEP-", visible=False)],
+    [sg.Text("Log", key="-LOGLABEL-", visible=False)],
+    [sg.Multiline("GUI ready. Default model: Hantek 6022BE\n", size=(70, 6), key="-LOG-", visible=False)],
 ]
 
 window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
@@ -78,6 +80,14 @@ def log(msg):
     current = window["-LOG-"].get()
     lines = (current + msg + "\n").splitlines()[-30:]
     window["-LOG-"].update("\n".join(lines) + "\n")
+
+def toggle_log():
+    global log_visible
+    log_visible = not log_visible
+    window["-LOG-"].update(visible=log_visible)
+    window["-LOGLABEL-"].update(visible=log_visible)
+    window["-LOGSEP-"].update(visible=log_visible)
+    window["-MENU-"].update(menu_definition=build_menu())
 
 def set_model(model):
     global selected_model, connected, device
@@ -148,6 +158,9 @@ while True:
 
     if event in ("Hantek 6022BL", "\u2713 Hantek 6022BL"):
         set_model("Hantek 6022BL")
+
+    if event in ("Show Log", "\u2713 Show Log"):
+        toggle_log()
 
     # Every 5 seconds: try connect if not connected, or ping if connected
     now = time.time()
