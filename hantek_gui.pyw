@@ -237,6 +237,21 @@ def do_disconnect():
     set_status("Status: Disconnected")
     log("Disconnected")
 
+def plot_trace(canvas, ydata, color, w, h, margin):
+    if not ydata or len(ydata) < 2:
+        return
+    n = len(ydata)
+    pts = []
+    ymin, ymax = min(ydata), max(ydata)
+    if ymax == ymin:
+        ymax = ymin + 1
+    for i, val in enumerate(ydata):
+        x = margin + int((w - 2 * margin) * i / max(n - 1, 1))
+        y = margin + int((h - 2 * margin) * (1 - (val - ymin) / (ymax - ymin)))
+        pts.extend([x, y])
+    if len(pts) >= 4:
+        canvas.create_line(pts, fill=color, width=1)
+
 def draw_waveform(data):
     canvas = window["-WAVE-"].TKCanvas
     canvas.delete("all")
@@ -256,7 +271,7 @@ def draw_waveform(data):
     canvas.create_line(margin, margin, margin, h - margin, fill="#888")
     canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
 
-    # Voltage scale (left)
+    # Voltage scale (left) - use CH1 scale
     scale_v = 1.0
     try:
         s = window["-SCALE1-"].get()
@@ -275,20 +290,11 @@ def draw_waveform(data):
     tb = window["-TB-"].get()
     canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div", fill="#aaa", font=("Arial", 9))
 
-    # Plot data
-    ydata = data.get("y") or data.get("y0") or []
-    if ydata:
-        n = len(ydata)
-        pts = []
-        ymin, ymax = min(ydata), max(ydata)
-        if ymax == ymin:
-            ymax = ymin + 1
-        for i, val in enumerate(ydata):
-            x = margin + int((w - 2 * margin) * i / max(n - 1, 1))
-            y = margin + int((h - 2 * margin) * (1 - (val - ymin) / (ymax - ymin)))
-            pts.extend([x, y])
-        if len(pts) >= 4:
-            canvas.create_line(pts, fill="#FFD700", width=1)
+    # Plot CH1 (yellow) and CH2 (cyan)
+    y0 = data.get("y0") or data.get("y") or []
+    y1 = data.get("y1") or []
+    plot_trace(canvas, y0, "#FFD700", w, h, margin)
+    plot_trace(canvas, y1, "#00FFFF", w, h, margin)
 
 def do_acquire():
     if not connected or device is None:
@@ -304,11 +310,12 @@ def do_acquire():
         if not channels:
             channels = [0]
         data = device.query_waveform(channels)
-        log(f"Acquired {len(data.get('y', data.get('y0', [])))} samples")
-        y = data.get("y") or data.get("y0") or []
-        if y:
-            mean = sum(y) / len(y)
-            window["-READOUT-"].update(f"CH1: {mean:.3f} V")
+        y0 = data.get("y0") or data.get("y") or []
+        y1 = data.get("y1") or []
+        log(f"Acquired CH1: {len(y0)} samples, CH2: {len(y1)} samples")
+        m0 = sum(y0) / len(y0) if y0 else 0.0
+        m1 = sum(y1) / len(y1) if y1 else 0.0
+        window["-READOUT-"].update(f"CH1: {m0:.3f} V   CH2: {m1:.3f} V")
         draw_waveform(data)
         log("Acquire done")
     except Exception as e:
