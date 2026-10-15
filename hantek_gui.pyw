@@ -26,6 +26,7 @@ zoom_x = 1.0
 pan_start = 0.0
 last_save = 0
 current_values = {}
+running = False
 
 drag_start_x = None
 drag_start_pan = 0.0
@@ -76,7 +77,7 @@ layout = [
      sg.Column(timebase_col, vertical_alignment="top")],
 
     [sg.HorizontalSeparator()],
-    [sg.Button("Apply"), sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop"), sg.Button("Force Trigger")],
+    [sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop", key="-RUN-"), sg.Button("Force Trigger")],
 
     [sg.HorizontalSeparator()],
     [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-")],
@@ -119,9 +120,10 @@ def set_status(text):
     window["-STATUS-"].update(text)
     window["-CONN-"].update(disabled=connected)
     window["-ACQ-"].update(disabled=not connected)
+    window["-RUN-"].update(disabled=not connected)
 
 def set_model(model):
-    global selected_model, connected, device
+    global selected_model, connected, device, running
     if model == selected_model:
         return
     selected_model = model
@@ -134,6 +136,7 @@ def set_model(model):
             pass
         connected = False
         device = None
+        running = False
         set_status("Status: Waiting")
 
 def safe_get(key, default=None):
@@ -277,58 +280,47 @@ def parse_tb(s):
 
 def apply_settings():
     if not connected or device is None:
-        log("Cannot apply settings: not connected")
         return False
     try:
-        log("Applying settings to device...")
         ch1 = window["-CH1-"].get()
         ch2 = window["-CH2-"].get()
-        log(f"Setting CH1 enable: {ch1}")
         device.set_channel_enable(0, ch1)
-        log(f"Setting CH2 enable: {ch2}")
         device.set_channel_enable(1, ch2)
 
         scale1 = parse_scale(window["-SCALE1-"].get())
-        log(f"Setting CH1 scale: {scale1} V/div")
         device.set_channel_scale(0, scale1)
 
         scale2 = parse_scale(window["-SCALE2-"].get())
-        log(f"Setting CH2 scale: {scale2} V/div")
         device.set_channel_scale(1, scale2)
 
         tb = parse_tb(window["-TB-"].get())
-        log(f"Setting timebase: {tb} s/div")
         device.set_timebase_scale(tb)
 
         src = 0 if window["-TRIGSRC-"].get() == "CH1" else 1
-        log(f"Setting trigger source: {src}")
         try:
             device.set_trigger_source(src)
-        except Exception as e:
-            log(f"Trigger source not set: {e}")
+        except Exception:
+            pass
 
         slope = window["-SLOPE-"].get()
-        log(f"Setting trigger slope: {slope}")
         try:
             device.set_trigger_slope(slope)
-        except Exception as e:
-            log(f"Trigger slope not set: {e}")
+        except Exception:
+            pass
 
         try:
             level = float(window["-LEVEL-"].get())
-            log(f"Setting trigger level: {level} V")
             device.set_trigger_level(src, level)
-        except Exception as e:
-            log(f"Trigger level not set: {e}")
+        except Exception:
+            pass
 
-        log("Settings applied successfully")
         return True
     except Exception as e:
         log(f"Apply settings failed: {e}")
         return False
 
 def try_connect():
-    global connected, device
+    global connected, device, running
     if not DEVICE_OK:
         log("Device library not installed (pip install pyhantek6022)")
         set_status("Status: No library")
@@ -361,6 +353,7 @@ def try_connect():
         log("Connecting to device...")
         device.connect()
         connected = True
+        running = False
         set_status("Status: Connected")
         log("Connected")
         apply_settings()
@@ -369,11 +362,12 @@ def try_connect():
         log(f"Connect failed: {e}")
         connected = False
         device = None
+        running = False
         set_status("Status: Failed")
         return False
 
 def do_disconnect():
-    global connected, device
+    global connected, device, running
     if device is not None:
         try:
             device.disconnect()
@@ -381,6 +375,7 @@ def do_disconnect():
             pass
     connected = False
     device = None
+    running = False
     set_status("Status: Disconnected")
     log("Disconnected")
 
@@ -519,13 +514,15 @@ def bind_events():
 
 bind_events()
 
-def do_acquire():
+def do_acquire(quiet=False):
     global last_data, zoom_x, pan_start
     if not connected or device is None:
-        log("Not connected")
-        return
+        if not quiet:
+            log("Not connected")
+        return False
     try:
-        log("=== Acquire started ===")
+        if not quiet:
+            log("=== Acquire started ===")
         apply_settings()
         channels = []
         if window["-CH1-"].get():
@@ -534,15 +531,10 @@ def do_acquire():
             channels.append(1)
         if not channels:
             channels = [0]
-        log(f"Querying waveform for channels: {channels}")
         data = device.query_waveform(channels)
-        log(f"Query returned keys: {list(data.keys()) if data else None}")
         last_data = data
-        zoom_x = 1.0
-        pan_start = 0.0
         y0 = to_list(data.get("y0") if data.get("y0") is not None else data.get("y"))
         y1 = to_list(data.get("y1"))
-        log(f"Acquired CH1: {len(y0)} samples, CH2: {len(y1)} samples")
         p1 = get_probe_factor("-PROBE1-")
         p2 = get_probe_factor("-PROBE2-")
         m0 = (sum(y0) / len(y0) if len(y0) > 0 else 0.0) * p1
@@ -550,12 +542,16 @@ def do_acquire():
         window["-READOUT-"].update(f"CH1: {m0:.3f} V   CH2: {m1:.3f} V")
         draw_waveforms(data)
         update_sliders()
-        log("=== Acquire done ===")
+        if not quiet:
+            log("=== Acquire done ===")
+        return True
     except Exception as e:
-        log(f"Acquire failed: {e}")
+        if not quiet:
+            log(f"Acquire failed: {e}")
+        return False
 
 def ping():
-    global connected, device
+    global connected, device, running
     if not connected or device is None:
         return
     try:
@@ -564,6 +560,7 @@ def ping():
         log(f"Ping failed: {e}")
         connected = False
         device = None
+        running = False
         set_status("Status: Lost")
 
 log(f"Settings file: {SETTINGS_FILE}")
@@ -571,7 +568,7 @@ load_auto_settings()
 try_connect()
 
 while True:
-    event, values = window.read(timeout=500)
+    event, values = window.read(timeout=200 if running else 500)
     current_values = values or {}
 
     if event in (sg.WIN_CLOSED, "Exit"):
@@ -614,8 +611,11 @@ while True:
     if event == "-ACQ-":
         do_acquire()
 
-    if event == "Apply":
-        apply_settings()
+    if event == "-RUN-":
+        if connected:
+            running = not running
+            window["-RUN-"].update("Stop" if running else "Run / Stop")
+            log("Running" if running else "Stopped")
 
     if event == "-PAN-":
         pan_start = values[event] / 100.0
@@ -629,6 +629,9 @@ while True:
         last_save = now
         if last_data is not None:
             draw_waveforms(last_data)
+
+    if running and connected:
+        do_acquire(quiet=True)
 
     if connected and now - last_ping >= 5:
         ping()
