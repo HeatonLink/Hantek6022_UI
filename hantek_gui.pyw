@@ -16,7 +16,7 @@ except Exception:
 selected_model = "Hantek 6022BE"
 connected = False
 device = None
-last_action = 0
+last_ping = 0
 log_visible = False
 
 menu_def = [["Options", ["Device", ["Hantek 6022BE", "Hantek 6022BL"], "Show Log"]]]
@@ -46,6 +46,7 @@ layout = [
     [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-"),
      sg.Push(),
      sg.Button("Connect", key="-CONN-", size=(12, 1)),
+     sg.Button("Disconnect", key="-DISC-", size=(12, 1)),
      sg.Text("Status: Waiting", key="-STATUS-")],
     [sg.HorizontalSeparator()],
 
@@ -87,10 +88,6 @@ def toggle_log():
 
 def set_status(text):
     window["-STATUS-"].update(text)
-    if connected:
-        window["-CONN-"].update("Disconnect")
-    else:
-        window["-CONN-"].update("Connect")
 
 def set_model(model):
     global selected_model, connected, device
@@ -118,7 +115,6 @@ def try_connect():
         log(f"Trying to connect to {selected_model}...")
         set_status("Status: Connecting...")
 
-        # Check for uninitialized devices and upload firmware
         try:
             uploader = FirmwareUploader()
             pending = uploader.find_devs()
@@ -193,19 +189,16 @@ while True:
         toggle_log()
 
     if event == "-CONN-":
-        if connected:
-            do_disconnect()
-        else:
-            try_connect()
-        last_action = time.time()
+        try_connect()
 
+    if event == "-DISC-":
+        do_disconnect()
+
+    # Only ping while connected (no auto-connect)
     now = time.time()
-    if now - last_action >= 5:
-        if not connected:
-            try_connect()
-        else:
-            ping()
-        last_action = now
+    if connected and now - last_ping >= 5:
+        ping()
+        last_ping = now
 
 if device is not None:
     try:
