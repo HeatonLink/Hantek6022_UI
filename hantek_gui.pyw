@@ -24,26 +24,29 @@ def build_menu():
     bl = "\u2713 Hantek 6022BL" if selected_model == "Hantek 6022BL" else "Hantek 6022BL"
     return [["Options", ["Device", [be, bl]]]]
 
-layout = [
-    [sg.Menu(build_menu(), key="-MENU-")],
-    [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-")],
-    [sg.HorizontalSeparator()],
-
+channels_col = [
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
     [sg.Checkbox("CH1", default=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
     [sg.Checkbox("CH2", default=False), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
+]
 
-    [sg.HorizontalSeparator()],
+right_col = [
     [sg.Text("Timebase", font=("Helvetica", 12, "bold"))],
     [sg.Combo(["100us", "200us", "500us", "1ms", "2ms", "5ms", "10ms", "20ms"], default_value="1ms", size=(10, 1)), sg.Text("/div")],
-
-    [sg.HorizontalSeparator()],
     [sg.Text("Trigger", font=("Helvetica", 12, "bold"))],
     [sg.Text("Source"), sg.Combo(["CH1", "CH2"], default_value="CH1", size=(8, 1))],
     [sg.Text("Slope"), sg.Combo(["Rising", "Falling", "Both"], default_value="Rising", size=(8, 1))],
     [sg.Text("Level"), sg.Input("0.0", size=(8, 1)), sg.Text("V")],
     [sg.Text("Position"), sg.Slider(range=(0, 100), default_value=50, orientation="h", size=(15, 15))],
     [sg.Radio("Auto", "MODE", default=True), sg.Radio("Normal", "MODE"), sg.Radio("Single", "MODE")],
+]
+
+layout = [
+    [sg.Menu(build_menu(), key="-MENU-")],
+    [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-")],
+    [sg.HorizontalSeparator()],
+
+    [sg.Column(channels_col, vertical_alignment="top"), sg.VSeparator(), sg.Column(right_col, vertical_alignment="top")],
 
     [sg.HorizontalSeparator()],
     [sg.Button("Apply"), sg.Button("Acquire"), sg.Button("Run / Stop"), sg.Button("Force Trigger")],
