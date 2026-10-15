@@ -122,7 +122,7 @@ def set_status(text):
     window["-ACQ-"].update(disabled=not connected)
     window["-RUN-"].update(disabled=not connected)
     if not connected:
-        window["-RUN-"].update(button_color=("white", "#444"))
+        window["-RUN-"].update(button_color=sg.theme_button_color())
 
 def set_model(model):
     global selected_model, connected, device, running
@@ -645,7 +645,7 @@ while True:
     if event == "-RUN-":
         if connected:
             running = not running
-            window["-RUN-"].update(button_color=("white", "red") if running else ("white", "#444"))
+            window["-RUN-"].update(button_color=("white", "red") if running else sg.theme_button_color())
             log("Running" if running else "Stopped")
 
     if event == "-PAN-":
