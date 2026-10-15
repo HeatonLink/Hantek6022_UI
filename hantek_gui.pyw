@@ -42,8 +42,8 @@ num_samples = ["1000", "2000", "5000", "10000", "20000", "50000"]
 
 channels_col = [
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
-    [sg.Checkbox("CH1", default=True, key="-CH1-", enable_events=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE1-", enable_events=True)],
-    [sg.Checkbox("CH2", default=False, key="-CH2-", enable_events=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE2-", enable_events=True)],
+    [sg.Checkbox("CH1", default=True, key="-CH1-", enable_events=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE1-", enable_events=True), sg.Text("Probe"), sg.Combo(["1x", "10x"], default_value="1x", size=(5, 1), key="-PROBE1-", enable_events=True)],
+    [sg.Checkbox("CH2", default=False, key="-CH2-", enable_events=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE2-", enable_events=True), sg.Text("Probe"), sg.Combo(["1x", "10x"], default_value="1x", size=(5, 1), key="-PROBE2-", enable_events=True)],
     [sg.Text("Sample Rate"), sg.Combo(sample_rates, default_value="1MS/s", size=(10, 1), key="-SRATE-", enable_events=True)],
     [sg.Text("Samples"), sg.Combo(num_samples, default_value="10000", size=(10, 1), key="-NSAMP-", enable_events=True)],
 ]
@@ -142,6 +142,10 @@ def safe_get(key, default=None):
     except Exception:
         return current_values.get(key, default)
 
+def get_probe_factor(key):
+    p = safe_get(key, "1x")
+    return 10.0 if str(p) == "10x" else 1.0
+
 def get_settings():
     ch1 = bool(safe_get("-CH1-", True))
     ch2 = bool(safe_get("-CH2-", False))
@@ -149,8 +153,10 @@ def get_settings():
         "model": selected_model,
         "ch1": ch1,
         "scale1": safe_get("-SCALE1-", "1V"),
+        "probe1": safe_get("-PROBE1-", "1x"),
         "ch2": ch2,
         "scale2": safe_get("-SCALE2-", "1V"),
+        "probe2": safe_get("-PROBE2-", "1x"),
         "srate": safe_get("-SRATE-", "1MS/s"),
         "nsamp": safe_get("-NSAMP-", "10000"),
         "trigsrc": safe_get("-TRIGSRC-", "CH1"),
@@ -175,11 +181,15 @@ def set_settings(s):
             log(f"Restored CH1={s['ch1']}")
         if "scale1" in s:
             window["-SCALE1-"].update(s["scale1"])
+        if "probe1" in s:
+            window["-PROBE1-"].update(s["probe1"])
         if "ch2" in s:
             window["-CH2-"].update(bool(s["ch2"]))
             log(f"Restored CH2={s['ch2']}")
         if "scale2" in s:
             window["-SCALE2-"].update(s["scale2"])
+        if "probe2" in s:
+            window["-PROBE2-"].update(s["probe2"])
         if "srate" in s:
             window["-SRATE-"].update(s["srate"])
         if "nsamp" in s:
@@ -396,7 +406,7 @@ def update_sliders():
     except Exception:
         pass
 
-def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, show_tb=False):
+def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, probe_key, show_tb=False):
     canvas = window[canvas_key].TKCanvas
     canvas.delete("all")
     w = canvas.winfo_width() or 600
@@ -421,9 +431,11 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, show_tb=False):
     if ymax == ymin:
         ymax = ymin + 1.0
 
+    probe = get_probe_factor(probe_key)
+
     for i in range(9):
         y = margin + int((h - 2 * margin) * i / 8)
-        v = ymax - (ymax - ymin) * i / 8
+        v = (ymax - (ymax - ymin) * i / 8) * probe
         canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
 
     if show_tb:
@@ -458,8 +470,8 @@ def draw_waveforms(data):
         return
     y0 = data.get("y0") if data.get("y0") is not None else data.get("y")
     y1 = data.get("y1")
-    plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", show_tb=False)
-    plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", show_tb=True)
+    plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", "-PROBE1-", show_tb=False)
+    plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", "-PROBE2-", show_tb=True)
 
 def on_wheel(event, canvas_key):
     global zoom_x, pan_start
@@ -531,8 +543,10 @@ def do_acquire():
         y0 = to_list(data.get("y0") if data.get("y0") is not None else data.get("y"))
         y1 = to_list(data.get("y1"))
         log(f"Acquired CH1: {len(y0)} samples, CH2: {len(y1)} samples")
-        m0 = sum(y0) / len(y0) if len(y0) > 0 else 0.0
-        m1 = sum(y1) / len(y1) if len(y1) > 0 else 0.0
+        p1 = get_probe_factor("-PROBE1-")
+        p2 = get_probe_factor("-PROBE2-")
+        m0 = (sum(y0) / len(y0) if len(y0) > 0 else 0.0) * p1
+        m1 = (sum(y1) / len(y1) if len(y1) > 0 else 0.0) * p2
         window["-READOUT-"].update(f"CH1: {m0:.3f} V   CH2: {m1:.3f} V")
         draw_waveforms(data)
         update_sliders()
@@ -608,7 +622,7 @@ while True:
         if last_data is not None:
             draw_waveforms(last_data)
 
-    if event in ("-CH1-", "-CH2-", "-SCALE1-", "-SCALE2-", "-SRATE-", "-NSAMP-",
+    if event in ("-CH1-", "-CH2-", "-SCALE1-", "-SCALE2-", "-PROBE1-", "-PROBE2-", "-SRATE-", "-NSAMP-",
                  "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-",
                  "-YMIN1-", "-YMAX1-", "-YMIN2-", "-YMAX2-"):
         auto_save()
