@@ -3,7 +3,6 @@ import time
 
 sg.theme("DarkAmber")
 
-# Device library is optional — GUI still opens if missing
 try:
     from pyhantek6022.dso6022be import DSO6022BE, get_dsos
     from pyhantek6022.firmwareupload import FirmwareUploader
@@ -20,11 +19,7 @@ device = None
 last_action = 0
 log_visible = False
 
-def build_menu():
-    be = "\u2713 Hantek 6022BE" if selected_model == "Hantek 6022BE" else "Hantek 6022BE"
-    bl = "\u2713 Hantek 6022BL" if selected_model == "Hantek 6022BL" else "Hantek 6022BL"
-    log_item = "\u2713 Show Log" if log_visible else "Show Log"
-    return [["Options", ["Device", [be, bl], log_item]]]
+menu_def = [["Options", ["Device", ["Hantek 6022BE", "Hantek 6022BL"], "Show Log"]]]
 
 channels_col = [
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
@@ -47,10 +42,10 @@ timebase_col = [
 ]
 
 layout = [
-    [sg.Menu(build_menu(), key="-MENU-")],
+    [sg.Menu(menu_def, key="-MENU-")],
     [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-"),
      sg.Push(),
-     sg.Text("Status: Waiting", key="-STATUS-", justification="right")],
+     sg.Text("Status: Waiting", key="-STATUS-")],
     [sg.HorizontalSeparator()],
 
     [sg.Column(channels_col, vertical_alignment="top"), sg.VSeparator(),
@@ -69,25 +64,25 @@ layout = [
     [sg.Text("FFT")],
     [sg.Canvas(size=(600, 150), background_color="black")],
 
-    [sg.HorizontalSeparator(key="-LOGSEP-", visible=False)],
     [sg.Text("Log", key="-LOGLABEL-", visible=False)],
-    [sg.Multiline("GUI ready. Default model: Hantek 6022BE\n", size=(70, 6), key="-LOG-", visible=False)],
+    [sg.Multiline("GUI ready.\n", size=(70, 6), key="-LOG-", visible=False)],
 ]
 
 window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
 
 def log(msg):
-    current = window["-LOG-"].get()
-    lines = (current + msg + "\n").splitlines()[-30:]
-    window["-LOG-"].update("\n".join(lines) + "\n")
+    try:
+        current = window["-LOG-"].get()
+        lines = (current + msg + "\n").splitlines()[-30:]
+        window["-LOG-"].update("\n".join(lines) + "\n")
+    except Exception:
+        pass
 
 def toggle_log():
     global log_visible
     log_visible = not log_visible
     window["-LOG-"].update(visible=log_visible)
     window["-LOGLABEL-"].update(visible=log_visible)
-    window["-LOGSEP-"].update(visible=log_visible)
-    window["-MENU-"].update(menu_definition=build_menu())
 
 def set_model(model):
     global selected_model, connected, device
@@ -95,7 +90,6 @@ def set_model(model):
         return
     selected_model = model
     window["-TITLE-"].update(selected_model)
-    window["-MENU-"].update(menu_definition=build_menu())
     log(f"Model set to {selected_model}")
     if connected and device is not None:
         try:
@@ -109,7 +103,7 @@ def set_model(model):
 def try_connect():
     global connected, device
     if not DEVICE_OK:
-        log("Device library not installed (pip install pyhantek6022)")
+        log("Device library not installed")
         return False
     try:
         log(f"Trying to connect to {selected_model}...")
@@ -153,16 +147,15 @@ while True:
     if event in (sg.WIN_CLOSED, "Exit"):
         break
 
-    if event in ("Hantek 6022BE", "\u2713 Hantek 6022BE"):
+    if event == "Hantek 6022BE":
         set_model("Hantek 6022BE")
 
-    if event in ("Hantek 6022BL", "\u2713 Hantek 6022BL"):
+    if event == "Hantek 6022BL":
         set_model("Hantek 6022BL")
 
-    if event in ("Show Log", "\u2713 Show Log"):
+    if event == "Show Log":
         toggle_log()
 
-    # Every 5 seconds: try connect if not connected, or ping if connected
     now = time.time()
     if now - last_action >= 5:
         if not connected:
