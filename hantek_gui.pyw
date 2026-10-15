@@ -23,12 +23,11 @@ log_visible = False
 last_data = None
 last_width = 0
 zoom_x = 1.0
-pan_start = 0.0  # 0.0 to 1.0 fraction of data
+pan_start = 0.0
 
 drag_start_x = None
 drag_start_pan = 0.0
 
-# Use home directory for reliable settings path
 SETTINGS_FILE = os.path.join(os.path.expanduser("~"), ".hantek6022_settings.json")
 
 menu_def = [
@@ -94,7 +93,6 @@ layout = [
 
 window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
 
-# Set current size as minimum
 win_size = window.size
 window.TKroot.minsize(win_size[0], win_size[1])
 last_width = win_size[0]
@@ -232,6 +230,69 @@ def load_settings():
     except Exception as e:
         log(f"Load failed: {e}")
 
+def parse_tb(s):
+    try:
+        if "us" in s:
+            return float(s.replace("us", "")) * 1e-6
+        if "ms" in s:
+            return float(s.replace("ms", "")) * 1e-3
+        return 1e-3
+    except Exception:
+        return 1e-3
+
+def apply_settings():
+    if not connected or device is None:
+        log("Cannot apply settings: not connected")
+        return False
+    try:
+        log("Applying settings to device...")
+        ch1 = window["-CH1-"].get()
+        ch2 = window["-CH2-"].get()
+        log(f"Setting CH1 enable: {ch1}")
+        device.set_channel_enable(0, ch1)
+        log(f"Setting CH2 enable: {ch2}")
+        device.set_channel_enable(1, ch2)
+
+        scale1 = parse_scale(window["-SCALE1-"].get())
+        log(f"Setting CH1 scale: {scale1} V/div")
+        device.set_channel_scale(0, scale1)
+
+        scale2 = parse_scale(window["-SCALE2-"].get())
+        log(f"Setting CH2 scale: {scale2} V/div")
+        device.set_channel_scale(1, scale2)
+
+        tb = parse_tb(window["-TB-"].get())
+        log(f"Setting timebase: {tb} s/div")
+        device.set_timebase_scale(tb)
+
+        # Trigger
+        src = 0 if window["-TRIGSRC-"].get() == "CH1" else 1
+        log(f"Setting trigger source: {src}")
+        try:
+            device.set_trigger_source(src)
+        except Exception as e:
+            log(f"Trigger source not set: {e}")
+
+        slope = window["-SLOPE-"].get()
+        log(f"Setting trigger slope: {slope}")
+        try:
+            device.set_trigger_slope(slope)
+        except Exception as e:
+            log(f"Trigger slope not set: {e}")
+
+        try:
+            level = float(window["-LEVEL-"].get())
+            log(f"Setting trigger level: {level} V")
+            device.set_trigger_level(src, level)
+        except Exception as e:
+            log(f"Trigger level not set: {e}")
+
+        log("Settings applied successfully")
+        return True
+    except Exception as e:
+        log(f"Apply settings failed: {e}")
+        return False
+
 def try_connect():
     global connected, device
     if not DEVICE_OK:
@@ -263,10 +324,12 @@ def try_connect():
             return False
 
         device = DSO6022BE(dsos[0])
+        log("Connecting to device...")
         device.connect()
         connected = True
         set_status("Status: Connected")
         log("Connected")
+        apply_settings()
         return True
     except Exception as e:
         log(f"Connect failed: {e}")
@@ -314,7 +377,6 @@ def plot_trace(canvas_key, ydata, color, scale_key):
     h = canvas.winfo_height() or 180
     margin = 40
 
-    # Grid
     for i in range(1, 8):
         y = margin + int((h - 2 * margin) * i / 8)
         canvas.create_line(margin, y, w - margin, y, fill="#333", dash=(2, 4))
@@ -322,22 +384,18 @@ def plot_trace(canvas_key, ydata, color, scale_key):
         x = margin + int((w - 2 * margin) * i / 10)
         canvas.create_line(x, margin, x, h - margin, fill="#333", dash=(2, 4))
 
-    # Axes
     canvas.create_line(margin, margin, margin, h - margin, fill="#888")
     canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
 
-    # Voltage scale (Y axis fixed)
     scale_v = parse_scale(window[scale_key].get())
     for i in range(9):
         y = margin + int((h - 2 * margin) * i / 8)
         v = (4 - i) * scale_v
         canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
 
-    # Time scale label
     tb = window["-TB-"].get()
     canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div  (zoom {zoom_x:.1f}x)", fill="#aaa", font=("Arial", 9))
 
-    # Plot with X zoom and pan
     ydata = to_list(ydata)
     if len(ydata) < 2:
         return
@@ -392,7 +450,6 @@ def on_drag(event):
     if drag_start_x is None or last_data is None:
         return
     dx = event.x - drag_start_x
-    # Convert pixel drag to pan fraction
     canvas = event.widget
     w = canvas.winfo_width() or 600
     fraction = -dx / max(w, 1)
@@ -422,7 +479,8 @@ def do_acquire():
         log("Not connected")
         return
     try:
-        log("Acquiring...")
+        log("=== Acquire started ===")
+        apply_settings()
         channels = []
         if window["-CH1-"].get():
             channels.append(0)
@@ -430,7 +488,9 @@ def do_acquire():
             channels.append(1)
         if not channels:
             channels = [0]
+        log(f"Querying waveform for channels: {channels}")
         data = device.query_waveform(channels)
+        log(f"Query returned keys: {list(data.keys()) if data else None}")
         last_data = data
         zoom_x = 1.0
         pan_start = 0.0
@@ -442,7 +502,7 @@ def do_acquire():
         window["-READOUT-"].update(f"CH1: {m0:.3f} V   CH2: {m1:.3f} V")
         draw_waveforms(data)
         update_sliders()
-        log("Acquire done")
+        log("=== Acquire done ===")
     except Exception as e:
         log(f"Acquire failed: {e}")
 
@@ -459,10 +519,7 @@ def ping():
         device = None
         set_status("Status: Lost")
 
-# Load previous settings on startup
 load_auto_settings()
-
-# Try to connect once on startup
 try_connect()
 
 while True:
@@ -472,7 +529,6 @@ while True:
         auto_save()
         break
 
-    # Redraw charts if window width changed
     current_width = window.size[0]
     if current_width != last_width and last_data is not None:
         draw_waveforms(last_data)
@@ -504,17 +560,18 @@ while True:
     if event == "-ACQ-":
         do_acquire()
 
+    if event == "Apply":
+        apply_settings()
+
     if event in ("-PAN1-", "-PAN2-"):
         pan_start = values[event] / 100.0
         if last_data is not None:
             draw_waveforms(last_data)
 
-    # Auto-save on any setting change (including CH1/CH2)
     if event in ("-CH1-", "-SCALE1-", "-CH2-", "-SCALE2-", "-SRATE-", "-NSAMP-",
                  "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-"):
         auto_save()
 
-    # Only ping while connected (no auto-connect)
     now = time.time()
     if connected and now - last_ping >= 5:
         ping()
