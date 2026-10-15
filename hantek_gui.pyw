@@ -24,11 +24,13 @@ last_data = None
 last_width = 0
 zoom_x = 1.0
 pan_start = 0.0
+last_save = 0
 
 drag_start_x = None
 drag_start_pan = 0.0
 
 SETTINGS_FILE = os.path.join(os.path.expanduser("~"), ".hantek6022_settings.json")
+log(f"Settings file: {SETTINGS_FILE}")
 
 menu_def = [
     ["File", ["Save Settings", "Load Settings"]],
@@ -138,7 +140,6 @@ def set_model(model):
 def get_settings():
     ch1 = bool(window["-CH1-"].get())
     ch2 = bool(window["-CH2-"].get())
-    log(f"Saving CH1={ch1}, CH2={ch2}")
     return {
         "model": selected_model,
         "ch1": ch1,
@@ -194,13 +195,15 @@ def set_settings(s):
 
 def auto_save():
     try:
+        s = get_settings()
         with open(SETTINGS_FILE, "w") as f:
-            json.dump(get_settings(), f, indent=2)
-        log(f"Settings saved to {SETTINGS_FILE}")
+            json.dump(s, f, indent=2)
+        log(f"Saved CH1={s['ch1']}, CH2={s['ch2']} to {SETTINGS_FILE}")
     except Exception as e:
         log(f"Auto-save failed: {e}")
 
 def load_auto_settings():
+    log(f"Looking for settings at {SETTINGS_FILE}")
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, "r") as f:
@@ -533,6 +536,12 @@ while True:
         auto_save()
         break
 
+    # Periodic auto-save every 2 seconds
+    now = time.time()
+    if now - last_save >= 2:
+        auto_save()
+        last_save = now
+
     current_width = window.size[0]
     if current_width != last_width and last_data is not None:
         draw_waveforms(last_data)
@@ -572,16 +581,11 @@ while True:
         if last_data is not None:
             draw_waveforms(last_data)
 
-    # Force save on checkbox changes
-    if event in ("-CH1-", "-CH2-"):
-        log(f"Checkbox event: {event} = {values.get(event)}")
-        auto_save()
-
-    if event in ("-SCALE1-", "-SCALE2-", "-SRATE-", "-NSAMP-",
+    if event in ("-CH1-", "-CH2-", "-SCALE1-", "-SCALE2-", "-SRATE-", "-NSAMP-",
                  "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-"):
         auto_save()
+        last_save = now
 
-    now = time.time()
     if connected and now - last_ping >= 5:
         ping()
         last_ping = now
