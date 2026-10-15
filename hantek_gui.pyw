@@ -400,7 +400,9 @@ def plot_trace(canvas_key, ydata, color, scale_key):
     canvas.create_line(margin, margin, margin, h - margin, fill="#888")
     canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
 
-    scale_v = parse_scale(window[scale_key].get())
+    # Fixed voltage scale: ±4 divisions
+    scale_v = parse_scale(safe_get(scale_key, "1V"))
+    full_range = 8 * scale_v  # 4 above + 4 below center
     for i in range(9):
         y = margin + int((h - 2 * margin) * i / 8)
         v = (4 - i) * scale_v
@@ -420,14 +422,16 @@ def plot_trace(canvas_key, ydata, color, scale_key):
     view = ydata[start:end]
     if len(view) < 2:
         return
+
+    # Map voltage to fixed scale (center = 0V)
     pts = []
-    ymin, ymax = min(view), max(view)
-    if ymax == ymin:
-        ymax = ymin + 1
     vn = len(view)
     for i, val in enumerate(view):
         x = margin + int((w - 2 * margin) * i / max(vn - 1, 1))
-        y = margin + int((h - 2 * margin) * (1 - (val - ymin) / (ymax - ymin)))
+        # Clamp and map: +4*scale = top, -4*scale = bottom
+        norm = (val / (4 * scale_v)) if scale_v > 0 else 0
+        norm = max(-1.0, min(1.0, norm))
+        y = margin + int((h - 2 * margin) * (0.5 - 0.5 * norm))
         pts.extend([x, y])
     if len(pts) >= 4:
         canvas.create_line(pts, fill=color, width=1)
@@ -593,6 +597,8 @@ while True:
                  "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-"):
         auto_save()
         last_save = now
+        if last_data is not None:
+            draw_waveforms(last_data)
 
     if connected and now - last_ping >= 5:
         ping()
