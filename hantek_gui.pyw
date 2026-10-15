@@ -22,6 +22,7 @@ last_ping = 0
 log_visible = False
 last_data = None
 last_width = 0
+zoom_x = 1.0  # 1.0 = full width, higher = zoomed in
 
 # Use home directory for reliable settings path
 SETTINGS_FILE = os.path.join(os.path.expanduser("~"), ".hantek6022_settings.json")
@@ -315,28 +316,35 @@ def plot_trace(canvas_key, ydata, color, scale_key):
     canvas.create_line(margin, margin, margin, h - margin, fill="#888")
     canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
 
-    # Voltage scale
+    # Voltage scale (Y axis fixed)
     scale_v = parse_scale(window[scale_key].get())
     for i in range(9):
         y = margin + int((h - 2 * margin) * i / 8)
         v = (4 - i) * scale_v
         canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
 
-    # Time scale
+    # Time scale label
     tb = window["-TB-"].get()
-    canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div", fill="#aaa", font=("Arial", 9))
+    canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div  (zoom {zoom_x:.1f}x)", fill="#aaa", font=("Arial", 9))
 
-    # Plot
+    # Plot with X zoom
     ydata = to_list(ydata)
     if len(ydata) < 2:
         return
     n = len(ydata)
+    visible = max(2, int(n / zoom_x))
+    start = max(0, (n - visible) // 2)
+    end = min(n, start + visible)
+    view = ydata[start:end]
+    if len(view) < 2:
+        return
     pts = []
-    ymin, ymax = min(ydata), max(ydata)
+    ymin, ymax = min(view), max(view)
     if ymax == ymin:
         ymax = ymin + 1
-    for i, val in enumerate(ydata):
-        x = margin + int((w - 2 * margin) * i / max(n - 1, 1))
+    vn = len(view)
+    for i, val in enumerate(view):
+        x = margin + int((w - 2 * margin) * i / max(vn - 1, 1))
         y = margin + int((h - 2 * margin) * (1 - (val - ymin) / (ymax - ymin)))
         pts.extend([x, y])
     if len(pts) >= 4:
@@ -350,8 +358,30 @@ def draw_waveforms(data):
     plot_trace("-WAVE1-", y0, "#FFD700", "-SCALE1-")
     plot_trace("-WAVE2-", y1, "#00FFFF", "-SCALE2-")
 
+def on_wheel(event, canvas_key):
+    global zoom_x
+    # event.delta on Windows, event.num on Linux
+    delta = getattr(event, "delta", 0)
+    if delta == 0:
+        delta = 1 if getattr(event, "num", 0) == 4 else -1
+    if delta > 0:
+        zoom_x = min(20.0, zoom_x * 1.2)
+    else:
+        zoom_x = max(1.0, zoom_x / 1.2)
+    if last_data is not None:
+        draw_waveforms(last_data)
+
+def bind_wheel():
+    for key in ("-WAVE1-", "-WAVE2-"):
+        canvas = window[key].TKCanvas
+        canvas.bind("<MouseWheel>", lambda e, k=key: on_wheel(e, k))
+        canvas.bind("<Button-4>", lambda e, k=key: on_wheel(e, k))
+        canvas.bind("<Button-5>", lambda e, k=key: on_wheel(e, k))
+
+bind_wheel()
+
 def do_acquire():
-    global last_data
+    global last_data, zoom_x
     if not connected or device is None:
         log("Not connected")
         return
@@ -366,6 +396,7 @@ def do_acquire():
             channels = [0]
         data = device.query_waveform(channels)
         last_data = data
+        zoom_x = 1.0
         y0 = to_list(data.get("y0") if data.get("y0") is not None else data.get("y"))
         y1 = to_list(data.get("y1"))
         log(f"Acquired CH1: {len(y0)} samples, CH2: {len(y1)} samples")
