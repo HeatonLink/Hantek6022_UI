@@ -30,9 +30,7 @@ channels_col = [
     [sg.Checkbox("CH2", default=False), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
 ]
 
-right_col = [
-    [sg.Text("Timebase", font=("Helvetica", 12, "bold"))],
-    [sg.Combo(["100us", "200us", "500us", "1ms", "2ms", "5ms", "10ms", "20ms"], default_value="1ms", size=(10, 1)), sg.Text("/div")],
+trigger_col = [
     [sg.Text("Trigger", font=("Helvetica", 12, "bold"))],
     [sg.Text("Source"), sg.Combo(["CH1", "CH2"], default_value="CH1", size=(8, 1))],
     [sg.Text("Slope"), sg.Combo(["Rising", "Falling", "Both"], default_value="Rising", size=(8, 1))],
@@ -41,12 +39,19 @@ right_col = [
     [sg.Radio("Auto", "MODE", default=True), sg.Radio("Normal", "MODE"), sg.Radio("Single", "MODE")],
 ]
 
+timebase_col = [
+    [sg.Text("Timebase", font=("Helvetica", 12, "bold"))],
+    [sg.Combo(["100us", "200us", "500us", "1ms", "2ms", "5ms", "10ms", "20ms"], default_value="1ms", size=(10, 1)), sg.Text("/div")],
+]
+
 layout = [
     [sg.Menu(build_menu(), key="-MENU-")],
     [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-")],
     [sg.HorizontalSeparator()],
 
-    [sg.Column(channels_col, vertical_alignment="top"), sg.VSeparator(), sg.Column(right_col, vertical_alignment="top")],
+    [sg.Column(channels_col, vertical_alignment="top"), sg.VSeparator(),
+     sg.Column(trigger_col, vertical_alignment="top"), sg.VSeparator(),
+     sg.Column(timebase_col, vertical_alignment="top")],
 
     [sg.HorizontalSeparator()],
     [sg.Button("Apply"), sg.Button("Acquire"), sg.Button("Run / Stop"), sg.Button("Force Trigger")],
