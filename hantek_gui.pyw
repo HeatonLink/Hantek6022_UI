@@ -26,15 +26,9 @@ def build_menu():
 
 layout = [
     [sg.Menu(build_menu(), key="-MENU-")],
-    [sg.Text("HANTEK 6022", font=("Helvetica", 16, "bold"))],
-    [sg.Text("Model: Hantek 6022BE", key="-MODEL-")],
+    [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-")],
     [sg.HorizontalSeparator()],
 
-    [sg.Text("Device")],
-    [sg.Combo(["Hantek 6022BE", "Hantek 6022BL"], default_value="Hantek 6022BE", size=(25, 1), key="-DEV-")],
-    [sg.Button("Refresh"), sg.Button("Connect"), sg.Button("Disconnect")],
-
-    [sg.HorizontalSeparator()],
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
     [sg.Checkbox("CH1", default=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
     [sg.Checkbox("CH2", default=False), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
@@ -81,8 +75,7 @@ def set_model(model):
     if model == selected_model:
         return
     selected_model = model
-    window["-DEV-"].update(value=selected_model)
-    window["-MODEL-"].update(f"Model: {selected_model}")
+    window["-TITLE-"].update(selected_model)
     window["-MENU-"].update(menu_definition=build_menu())
     log(f"Model set to {selected_model}")
     if connected and device is not None:
@@ -146,22 +139,6 @@ while True:
 
     if event in ("Hantek 6022BL", "\u2713 Hantek 6022BL"):
         set_model("Hantek 6022BL")
-
-    if event == "Connect":
-        try_connect()
-        last_action = time.time()
-
-    if event == "Disconnect":
-        if device is not None:
-            try:
-                device.disconnect()
-            except Exception:
-                pass
-        connected = False
-        device = None
-        window["-STATUS-"].update("Status: Disconnected")
-        log("Disconnected")
-        last_action = time.time()
 
     # Every 5 seconds: try connect if not connected, or ping if connected
     now = time.time()
