@@ -237,8 +237,17 @@ def do_disconnect():
     set_status("Status: Disconnected")
     log("Disconnected")
 
+def to_list(arr):
+    if arr is None:
+        return []
+    try:
+        return list(arr)
+    except Exception:
+        return []
+
 def plot_trace(canvas, ydata, color, w, h, margin):
-    if not ydata or len(ydata) < 2:
+    ydata = to_list(ydata)
+    if len(ydata) < 2:
         return
     n = len(ydata)
     pts = []
@@ -291,8 +300,8 @@ def draw_waveform(data):
     canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div", fill="#aaa", font=("Arial", 9))
 
     # Plot CH1 (yellow) and CH2 (cyan)
-    y0 = data.get("y0") or data.get("y") or []
-    y1 = data.get("y1") or []
+    y0 = data.get("y0") if data.get("y0") is not None else data.get("y")
+    y1 = data.get("y1")
     plot_trace(canvas, y0, "#FFD700", w, h, margin)
     plot_trace(canvas, y1, "#00FFFF", w, h, margin)
 
@@ -310,11 +319,11 @@ def do_acquire():
         if not channels:
             channels = [0]
         data = device.query_waveform(channels)
-        y0 = data.get("y0") or data.get("y") or []
-        y1 = data.get("y1") or []
+        y0 = to_list(data.get("y0") if data.get("y0") is not None else data.get("y"))
+        y1 = to_list(data.get("y1"))
         log(f"Acquired CH1: {len(y0)} samples, CH2: {len(y1)} samples")
-        m0 = sum(y0) / len(y0) if y0 else 0.0
-        m1 = sum(y1) / len(y1) if y1 else 0.0
+        m0 = sum(y0) / len(y0) if len(y0) > 0 else 0.0
+        m1 = sum(y1) / len(y1) if len(y1) > 0 else 0.0
         window["-READOUT-"].update(f"CH1: {m0:.3f} V   CH2: {m1:.3f} V")
         draw_waveform(data)
         log("Acquire done")
