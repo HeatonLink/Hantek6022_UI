@@ -25,10 +25,15 @@ menu_def = [
     ["Options", ["Device", ["Hantek 6022BE", "Hantek 6022BL"], "Show Log"]]
 ]
 
+sample_rates = ["100kS/s", "200kS/s", "500kS/s", "1MS/s", "4MS/s", "8MS/s", "16MS/s", "24MS/s"]
+num_samples = ["1000", "2000", "5000", "10000", "20000", "50000"]
+
 channels_col = [
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
     [sg.Checkbox("CH1", default=True, key="-CH1-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE1-")],
     [sg.Checkbox("CH2", default=False, key="-CH2-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE2-")],
+    [sg.Text("Sample Rate"), sg.Combo(sample_rates, default_value="1MS/s", size=(10, 1), key="-SRATE-")],
+    [sg.Text("Samples"), sg.Combo(num_samples, default_value="10000", size=(10, 1), key="-NSAMP-")],
 ]
 
 trigger_col = [
@@ -125,6 +130,8 @@ def get_settings():
         "scale1": window["-SCALE1-"].get(),
         "ch2": window["-CH2-"].get(),
         "scale2": window["-SCALE2-"].get(),
+        "srate": window["-SRATE-"].get(),
+        "nsamp": window["-NSAMP-"].get(),
         "trigsrc": window["-TRIGSRC-"].get(),
         "slope": window["-SLOPE-"].get(),
         "level": window["-LEVEL-"].get(),
@@ -146,6 +153,10 @@ def set_settings(s):
             window["-CH2-"].update(s["ch2"])
         if "scale2" in s:
             window["-SCALE2-"].update(s["scale2"])
+        if "srate" in s:
+            window["-SRATE-"].update(s["srate"])
+        if "nsamp" in s:
+            window["-NSAMP-"].update(s["nsamp"])
         if "trigsrc" in s:
             window["-TRIGSRC-"].update(s["trigsrc"])
         if "slope" in s:
