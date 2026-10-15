@@ -23,8 +23,8 @@ menu_def = [["Options", ["Device", ["Hantek 6022BE", "Hantek 6022BL"], "Show Log
 
 channels_col = [
     [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
-    [sg.Checkbox("CH1", default=True, key="-CH1-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
-    [sg.Checkbox("CH2", default=False, key="-CH2-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1))],
+    [sg.Checkbox("CH1", default=True, key="-CH1-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE1-")],
+    [sg.Checkbox("CH2", default=False, key="-CH2-"), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE2-")],
 ]
 
 trigger_col = [
@@ -38,7 +38,7 @@ trigger_col = [
 
 timebase_col = [
     [sg.Text("Timebase", font=("Helvetica", 12, "bold"))],
-    [sg.Combo(["100us", "200us", "500us", "1ms", "2ms", "5ms", "10ms", "20ms"], default_value="1ms", size=(10, 1)), sg.Text("/div")],
+    [sg.Combo(["100us", "200us", "500us", "1ms", "2ms", "5ms", "10ms", "20ms"], default_value="1ms", size=(10, 1), key="-TB-"), sg.Text("/div")],
 ]
 
 layout = [
@@ -165,6 +165,59 @@ def do_disconnect():
     set_status("Status: Disconnected")
     log("Disconnected")
 
+def draw_waveform(data):
+    canvas = window["-WAVE-"].TKCanvas
+    canvas.delete("all")
+    w = canvas.winfo_width() or 600
+    h = canvas.winfo_height() or 250
+    margin = 40
+
+    # Grid
+    for i in range(1, 8):
+        y = margin + int((h - 2 * margin) * i / 8)
+        canvas.create_line(margin, y, w - margin, y, fill="#333", dash=(2, 4))
+    for i in range(1, 10):
+        x = margin + int((w - 2 * margin) * i / 10)
+        canvas.create_line(x, margin, x, h - margin, fill="#333", dash=(2, 4))
+
+    # Axes
+    canvas.create_line(margin, margin, margin, h - margin, fill="#888")
+    canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
+
+    # Voltage scale (left)
+    scale_v = 1.0
+    try:
+        s = window["-SCALE1-"].get()
+        if "mV" in s:
+            scale_v = float(s.replace("mV", "")) / 1000
+        else:
+            scale_v = float(s.replace("V", ""))
+    except Exception:
+        pass
+    for i in range(9):
+        y = margin + int((h - 2 * margin) * i / 8)
+        v = (4 - i) * scale_v
+        canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
+
+    # Time scale (bottom)
+    tb = window["-TB-"].get()
+    canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div", fill="#aaa", font=("Arial", 9))
+
+    # Plot data
+    ydata = data.get("y") or data.get("y0") or []
+    if ydata:
+        n = len(ydata)
+        pts = []
+        ymin, ymax = min(ydata), max(ydata)
+        if ymax == ymin:
+            ymax = ymin + 1
+        for i, val in enumerate(ydata):
+            x = margin + int((w - 2 * margin) * i / max(n - 1, 1))
+            y = margin + int((h - 2 * margin) * (1 - (val - ymin) / (ymax - ymin)))
+            pts.extend([x, y])
+        if len(pts) >= 4:
+            canvas.create_line(pts, fill="#FFD700", width=1)
+
 def do_acquire():
     if not connected or device is None:
         log("Not connected")
@@ -180,11 +233,11 @@ def do_acquire():
             channels = [0]
         data = device.query_waveform(channels)
         log(f"Acquired {len(data.get('y', data.get('y0', [])))} samples")
-        # Simple readout of mean if available
         y = data.get("y") or data.get("y0") or []
         if y:
             mean = sum(y) / len(y)
             window["-READOUT-"].update(f"CH1: {mean:.3f} V")
+        draw_waveform(data)
         log("Acquire done")
     except Exception as e:
         log(f"Acquire failed: {e}")
