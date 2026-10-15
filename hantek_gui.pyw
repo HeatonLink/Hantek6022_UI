@@ -102,7 +102,7 @@ last_width = win_size[0]
 def log(msg):
     try:
         current = window["-LOG-"].get()
-        new_text = msg + "\n\n" + current
+        new_text = msg + "\n" + current
         lines = new_text.splitlines(keepends=True)
         if len(lines) > 40:
             new_text = "".join(lines[:40])
@@ -529,7 +529,7 @@ def ping():
         return
     try:
         _ = device.identify()
-        log("Ping OK")
+        #log("Ping OK")
     except Exception as e:
         log(f"Ping failed: {e}")
         connected = False
