@@ -82,15 +82,14 @@ layout = [
     [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-")],
 
     [sg.HorizontalSeparator()],
-    [sg.Text("CH1 Waveform")],
+    [sg.Text("CH1 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN1-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX1-", enable_events=True)],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE1-", expand_x=True)],
-    [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN1-", expand_x=True, enable_events=True)],
-    [sg.Text("CH2 Waveform")],
+    [sg.Text("CH2 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN2-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX2-", enable_events=True)],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-", expand_x=True)],
-    [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN2-", expand_x=True, enable_events=True)],
+    [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN-", expand_x=True, enable_events=True)],
 
     [sg.Text("Log", key="-LOGLABEL-", visible=False)],
-    [sg.Multiline("GUI ready.\n\n", size=(70, 6), key="-LOG-", visible=False, expand_x=True)],
+    [sg.Multiline("GUI ready.\n", size=(70, 6), key="-LOG-", visible=False, expand_x=True)],
 ]
 
 window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
@@ -160,6 +159,10 @@ def get_settings():
         "pos": safe_get("-POS-", 50),
         "mode": "Auto" if safe_get("-AUTO-", True) else ("Normal" if safe_get("-NORM-", False) else "Single"),
         "tb": safe_get("-TB-", "1ms"),
+        "ymin1": safe_get("-YMIN1-", "-4.0"),
+        "ymax1": safe_get("-YMAX1-", "4.0"),
+        "ymin2": safe_get("-YMIN2-", "-4.0"),
+        "ymax2": safe_get("-YMAX2-", "4.0"),
     }
 
 def set_settings(s):
@@ -195,6 +198,14 @@ def set_settings(s):
             window["-SINGLE-"].update(s["mode"] == "Single")
         if "tb" in s:
             window["-TB-"].update(s["tb"])
+        if "ymin1" in s:
+            window["-YMIN1-"].update(s["ymin1"])
+        if "ymax1" in s:
+            window["-YMAX1-"].update(s["ymax1"])
+        if "ymin2" in s:
+            window["-YMIN2-"].update(s["ymin2"])
+        if "ymax2" in s:
+            window["-YMAX2-"].update(s["ymax2"])
         log("Settings loaded")
     except Exception as e:
         log(f"Load settings error: {e}")
@@ -380,10 +391,12 @@ def parse_scale(s):
         return 1.0
 
 def update_sliders():
-    window["-PAN1-"].update(value=int(pan_start * 100))
-    window["-PAN2-"].update(value=int(pan_start * 100))
+    try:
+        window["-PAN-"].update(value=int(pan_start * 100))
+    except Exception:
+        pass
 
-def plot_trace(canvas_key, ydata, color, scale_key):
+def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, show_tb=False):
     canvas = window[canvas_key].TKCanvas
     canvas.delete("all")
     w = canvas.winfo_width() or 600
@@ -400,16 +413,22 @@ def plot_trace(canvas_key, ydata, color, scale_key):
     canvas.create_line(margin, margin, margin, h - margin, fill="#888")
     canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
 
-    # Fixed voltage scale: ±4 divisions
-    scale_v = parse_scale(safe_get(scale_key, "1V"))
-    full_range = 8 * scale_v  # 4 above + 4 below center
+    try:
+        ymin = float(safe_get(ymin_key, "-4.0"))
+        ymax = float(safe_get(ymax_key, "4.0"))
+    except Exception:
+        ymin, ymax = -4.0, 4.0
+    if ymax == ymin:
+        ymax = ymin + 1.0
+
     for i in range(9):
         y = margin + int((h - 2 * margin) * i / 8)
-        v = (4 - i) * scale_v
+        v = ymax - (ymax - ymin) * i / 8
         canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
 
-    tb = window["-TB-"].get()
-    canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div  (zoom {zoom_x:.1f}x)", fill="#aaa", font=("Arial", 9))
+    if show_tb:
+        tb = window["-TB-"].get()
+        canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div  (zoom {zoom_x:.1f}x)", fill="#aaa", font=("Arial", 9))
 
     ydata = to_list(ydata)
     if len(ydata) < 2:
@@ -423,15 +442,13 @@ def plot_trace(canvas_key, ydata, color, scale_key):
     if len(view) < 2:
         return
 
-    # Map voltage to fixed scale (center = 0V)
     pts = []
     vn = len(view)
     for i, val in enumerate(view):
         x = margin + int((w - 2 * margin) * i / max(vn - 1, 1))
-        # Clamp and map: +4*scale = top, -4*scale = bottom
-        norm = (val / (4 * scale_v)) if scale_v > 0 else 0
-        norm = max(-1.0, min(1.0, norm))
-        y = margin + int((h - 2 * margin) * (0.5 - 0.5 * norm))
+        norm = (val - ymin) / (ymax - ymin)
+        norm = max(0.0, min(1.0, norm))
+        y = margin + int((h - 2 * margin) * (1.0 - norm))
         pts.extend([x, y])
     if len(pts) >= 4:
         canvas.create_line(pts, fill=color, width=1)
@@ -441,8 +458,8 @@ def draw_waveforms(data):
         return
     y0 = data.get("y0") if data.get("y0") is not None else data.get("y")
     y1 = data.get("y1")
-    plot_trace("-WAVE1-", y0, "#FFD700", "-SCALE1-")
-    plot_trace("-WAVE2-", y1, "#00FFFF", "-SCALE2-")
+    plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", show_tb=False)
+    plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", show_tb=True)
 
 def on_wheel(event, canvas_key):
     global zoom_x, pan_start
@@ -529,7 +546,6 @@ def ping():
         return
     try:
         _ = device.identify()
-        #log("Ping OK")
     except Exception as e:
         log(f"Ping failed: {e}")
         connected = False
@@ -548,7 +564,6 @@ while True:
         auto_save()
         break
 
-    # Periodic auto-save every 2 seconds
     now = time.time()
     if now - last_save >= 2:
         auto_save()
@@ -588,13 +603,14 @@ while True:
     if event == "Apply":
         apply_settings()
 
-    if event in ("-PAN1-", "-PAN2-"):
+    if event == "-PAN-":
         pan_start = values[event] / 100.0
         if last_data is not None:
             draw_waveforms(last_data)
 
     if event in ("-CH1-", "-CH2-", "-SCALE1-", "-SCALE2-", "-SRATE-", "-NSAMP-",
-                 "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-"):
+                 "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-",
+                 "-YMIN1-", "-YMAX1-", "-YMIN2-", "-YMAX2-"):
         auto_save()
         last_save = now
         if last_data is not None:
