@@ -158,6 +158,15 @@ def get_probe_factor(key):
     p = safe_get(key, "1x")
     return 10.0 if str(p) == "10x" else 1.0
 
+def get_scope_rail_limits(scale_key, probe_key):
+    """Return (min_v, max_v) that the scope can measure at current scale (input side)."""
+    scale_v = parse_scale(safe_get(scale_key, "1V"))
+    # Hantek 6022 typical full-scale range is ±4 divisions
+    rail = 4.0 * scale_v
+    probe = get_probe_factor(probe_key)
+    # Limits at the probe tip (displayed voltage)
+    return -rail * probe, rail * probe
+
 def get_settings():
     ch1 = bool(safe_get("-CH1-", True))
     ch2 = bool(safe_get("-CH2-", False))
@@ -422,7 +431,7 @@ def update_sliders():
     except Exception:
         pass
 
-def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key, rail_h_key, rail_l_key, show_tb=False):
+def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key, scale_key, rail_h_key, rail_l_key, show_tb=False):
     canvas = window[canvas_key].TKCanvas
     canvas.delete("all")
     w = canvas.winfo_width() or 600
@@ -471,24 +480,19 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key
     if ymax == ymin:
         ymax = ymin + 1.0
 
-    # Check for railing on visible data
+    # Railed based on scope hardware range for this channel scale (not chart limits)
     railed_high = False
     railed_low = False
-    if len(ydata) >= 2:
-        n = len(ydata)
-        visible = max(2, int(n / zoom_x))
-        max_start = max(0, n - visible)
-        start = int(pan_start * max_start)
-        end = min(n, start + visible)
-        view = ydata[start:end]
-        if len(view) >= 1:
-            dmin = min(view)
-            dmax = max(view)
-            eps = (ymax - ymin) * 0.001
-            if dmax >= ymax - eps:
-                railed_high = True
-            if dmin <= ymin + eps:
-                railed_low = True
+    if len(ydata) >= 1:
+        rail_min, rail_max = get_scope_rail_limits(scale_key, probe_key)
+        # Data values are already in displayed volts (probe-adjusted)
+        dmin = min(ydata)
+        dmax = max(ydata)
+        eps = (rail_max - rail_min) * 0.002
+        if dmax >= rail_max - eps:
+            railed_high = True
+        if dmin <= rail_min + eps:
+            railed_low = True
 
     window[rail_h_key].update("Railed High" if railed_high else "")
     window[rail_l_key].update("Railed Low" if railed_low else "")
@@ -531,8 +535,8 @@ def draw_waveforms(data):
         return
     y0 = data.get("y0") if data.get("y0") is not None else data.get("y")
     y1 = data.get("y1")
-    plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", "-AUTO1-", "-PROBE1-", "-RAIL1H-", "-RAIL1L-", show_tb=False)
-    plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", "-AUTO2-", "-PROBE2-", "-RAIL2H-", "-RAIL2L-", show_tb=True)
+    plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", "-AUTO1-", "-PROBE1-", "-SCALE1-", "-RAIL1H-", "-RAIL1L-", show_tb=False)
+    plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", "-AUTO2-", "-PROBE2-", "-SCALE2-", "-RAIL2H-", "-RAIL2L-", show_tb=True)
 
 def on_wheel(event, canvas_key):
     global zoom_x, pan_start
