@@ -27,6 +27,7 @@ pan_start = 0.0
 last_save = 0
 current_values = {}
 running = False
+trigger_armed = False
 
 drag_start_x = None
 drag_start_pan = 0.0
@@ -77,7 +78,7 @@ layout = [
      sg.Column(timebase_col, vertical_alignment="top")],
 
     [sg.HorizontalSeparator()],
-    [sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop", key="-RUN-"), sg.Button("Force Trigger")],
+    [sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop", key="-RUN-"), sg.Button("Start Trigger", key="-TRIG-")],
 
     [sg.HorizontalSeparator()],
     [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-")],
@@ -129,7 +130,7 @@ def set_status(text):
         window["-RUN-"].update(button_color=sg.theme_button_color())
 
 def set_model(model):
-    global selected_model, connected, device, running
+    global selected_model, connected, device, running, trigger_armed
     if model == selected_model:
         return
     selected_model = model
@@ -143,6 +144,8 @@ def set_model(model):
         connected = False
         device = None
         running = False
+        trigger_armed = False
+        window["-TRIG-"].update(button_color=sg.theme_button_color())
         set_status("Status: Waiting")
 
 def safe_get(key, default=None):
@@ -332,7 +335,7 @@ def apply_settings():
         return False
 
 def try_connect():
-    global connected, device, running
+    global connected, device, running, trigger_armed
     if not DEVICE_OK:
         log("Device library not installed (pip install pyhantek6022)")
         set_status("Status: No library")
@@ -366,6 +369,8 @@ def try_connect():
         device.connect()
         connected = True
         running = False
+        trigger_armed = False
+        window["-TRIG-"].update(button_color=sg.theme_button_color())
         set_status("Status: Connected")
         log("Connected")
         apply_settings()
@@ -375,11 +380,13 @@ def try_connect():
         connected = False
         device = None
         running = False
+        trigger_armed = False
+        window["-TRIG-"].update(button_color=sg.theme_button_color())
         set_status("Status: Failed")
         return False
 
 def do_disconnect():
-    global connected, device, running
+    global connected, device, running, trigger_armed
     if device is not None:
         try:
             device.disconnect()
@@ -388,6 +395,8 @@ def do_disconnect():
     connected = False
     device = None
     running = False
+    trigger_armed = False
+    window["-TRIG-"].update(button_color=sg.theme_button_color())
     set_status("Status: Disconnected")
     log("Disconnected")
 
@@ -608,7 +617,7 @@ def do_acquire(quiet=False):
         return False
 
 def ping():
-    global connected, device, running
+    global connected, device, running, trigger_armed
     if not connected or device is None:
         return
     try:
@@ -618,6 +627,8 @@ def ping():
         connected = False
         device = None
         running = False
+        trigger_armed = False
+        window["-TRIG-"].update(button_color=sg.theme_button_color())
         set_status("Status: Lost")
 
 log(f"Settings file: {SETTINGS_FILE}")
@@ -673,6 +684,11 @@ while True:
             running = not running
             window["-RUN-"].update(button_color=("white", "red") if running else sg.theme_button_color())
             log("Running" if running else "Stopped")
+
+    if event == "-TRIG-":
+        trigger_armed = not trigger_armed
+        window["-TRIG-"].update(button_color=("white", "red") if trigger_armed else sg.theme_button_color())
+        log("Trigger armed" if trigger_armed else "Trigger disarmed")
 
     if event == "-PAN-":
         pan_start = values[event] / 100.0
