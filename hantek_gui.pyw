@@ -320,28 +320,54 @@ def apply_settings():
         tb = parse_tb(window["-TB-"].get())
         device.set_timebase_scale(tb)
 
+        # Trigger settings
         src = 0 if window["-TRIGSRC-"].get() == "CH1" else 1
         try:
             device.set_trigger_source(src)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Trigger source: {e}")
 
         slope = window["-SLOPE-"].get()
         try:
             device.set_trigger_slope(slope)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Trigger slope: {e}")
 
         try:
             level = float(window["-LEVEL-"].get())
             device.set_trigger_level(src, level)
-        except Exception:
-            pass
+        except Exception as e:
+            log(f"Trigger level: {e}")
+
+        try:
+            pos = int(window["-POS-"].get())
+            device.set_trigger_position(pos)
+        except Exception as e:
+            log(f"Trigger position: {e}")
+
+        mode = "Auto" if window["-AUTO-"].get() else ("Normal" if window["-NORM-"].get() else "Single")
+        try:
+            device.set_sweep_mode(mode)
+        except Exception as e:
+            log(f"Sweep mode: {e}")
 
         return True
     except Exception as e:
         log(f"Apply settings failed: {e}")
         return False
+
+def do_force_trigger():
+    if not connected or device is None:
+        log("Cannot force trigger: not connected")
+        return
+    try:
+        apply_settings()
+        device.force_trigger()
+        log("Force trigger sent")
+        # Immediately acquire once after force
+        do_acquire(quiet=True)
+    except Exception as e:
+        log(f"Force trigger failed: {e}")
 
 def try_connect():
     global connected, device, running, trigger_armed
@@ -692,7 +718,11 @@ while True:
     if event == "-TRIG-":
         trigger_armed = not trigger_armed
         window["-TRIG-"].update(button_color=("white", "red") if trigger_armed else sg.theme_button_color())
-        log("Trigger armed" if trigger_armed else "Trigger disarmed")
+        if trigger_armed:
+            log("Trigger armed - sending force trigger")
+            do_force_trigger()
+        else:
+            log("Trigger disarmed")
 
     if event == "-PAN-":
         pan_start = values[event] / 100.0
