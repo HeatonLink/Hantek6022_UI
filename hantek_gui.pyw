@@ -90,7 +90,6 @@ current_values = {}
 running = False
 trigger_armed = False
 log_lines = ["GUI ready."]
-math_equation = "CH1 - CH2"
 
 drag_start_x = None
 drag_start_pan = 0.0
@@ -141,7 +140,7 @@ layout = [
      sg.Column(timebase_col, vertical_alignment="top")],
 
     [sg.HorizontalSeparator()],
-    [sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop", key="-RUN-"), sg.Button("Start Trigger", key="-TRIG-"), sg.Button("Math", key="-MATH-")],
+    [sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop", key="-RUN-"), sg.Button("Start Trigger", key="-TRIG-")],
 
     [sg.HorizontalSeparator()],
     [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-")],
@@ -155,6 +154,8 @@ layout = [
     [sg.Text("", key="-RAIL2H-", text_color="red", font=("Helvetica", 10, "bold"))],
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-", expand_x=True)],
     [sg.Text("", key="-RAIL2L-", text_color="red", font=("Helvetica", 10, "bold"))],
+    [sg.Text("Math"), sg.Input("CH1 - CH2", size=(30, 1), key="-MATH-", enable_events=True), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMINM-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAXM-", enable_events=True), sg.Checkbox("Auto", key="-AUTOM-", enable_events=True)],
+    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVEM-", expand_x=True)],
     [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN-", expand_x=True, enable_events=True, disable_number_display=True, disabled=True)],
 ]
 
@@ -195,76 +196,8 @@ def compute_math(eq, y0, y1):
             expr = eq.replace("CH1", str(ch1)).replace("CH2", str(ch2))
             result.append(eval(expr, {"__builtins__": {}}, {}))
         return result
-    except Exception as e:
-        log(f"Math error: {e}")
+    except Exception:
         return []
-
-def show_math_window():
-    global math_equation
-    layout_m = [
-        [sg.Text("Equation (use CH1 and CH2)"), sg.Input(math_equation, key="-EQ-", size=(40, 1))],
-        [sg.Button("Update"), sg.Button("Close")],
-        [sg.Canvas(size=(700, 250), background_color="black", key="-MATHCANVAS-", expand_x=True)]
-    ]
-    win = sg.Window("Math Channel", layout_m, resizable=True, finalize=True)
-    canvas = win["-MATHCANVAS-"].TKCanvas
-
-    def draw_math(data):
-        canvas.delete("all")
-        w = canvas.winfo_width() or 700
-        h = canvas.winfo_height() or 250
-        margin = 40
-        if data is None:
-            canvas.create_text(w//2, h//2, text="No data", fill="white")
-            return
-        y0 = to_list(data.get("y0") if data.get("y0") is not None else data.get("y"))
-        y1 = to_list(data.get("y1"))
-        eq = win["-EQ-"].get().strip() or "CH1 - CH2"
-        result = compute_math(eq, y0, y1)
-        if len(result) < 2:
-            canvas.create_text(w//2, h//2, text="Need data from both channels", fill="white")
-            return
-        dmin = min(result)
-        dmax = max(result)
-        span = dmax - dmin
-        if span == 0:
-            span = 1.0
-        ymin = dmin - 0.1 * span
-        ymax = dmax + 0.1 * span
-        for i in range(1, 8):
-            y = margin + int((h - 2 * margin) * i / 8)
-            canvas.create_line(margin, y, w - margin, y, fill="#333", dash=(2, 4))
-        for i in range(1, 10):
-            x = margin + int((w - 2 * margin) * i / 10)
-            canvas.create_line(x, margin, x, h - margin, fill="#333", dash=(2, 4))
-        canvas.create_line(margin, margin, margin, h - margin, fill="#888")
-        canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
-        for i in range(9):
-            y = margin + int((h - 2 * margin) * i / 8)
-            v = ymax - (ymax - ymin) * i / 8
-            canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
-        pts = []
-        n = len(result)
-        for i, val in enumerate(result):
-            x = margin + int((w - 2 * margin) * i / max(n - 1, 1))
-            norm = (val - ymin) / (ymax - ymin)
-            norm = max(0.0, min(1.0, norm))
-            y = margin + int((h - 2 * margin) * (1.0 - norm))
-            pts.extend([x, y])
-        if len(pts) >= 4:
-            canvas.create_line(pts, fill="#FF80FF", width=1)
-        canvas.create_text(w//2, 15, text=eq, fill="#FF80FF", font=("Arial", 10, "bold"))
-
-    draw_math(last_data)
-
-    while True:
-        ev, vals = win.read(timeout=300 if running else None)
-        if ev in (sg.WIN_CLOSED, "Close"):
-            break
-        if ev == "Update" or running:
-            draw_math(last_data)
-            math_equation = vals.get("-EQ-", math_equation)
-    win.close()
 
 def set_status(text):
     window["-STATUS-"].update(text)
@@ -334,6 +267,10 @@ def get_settings():
         "ymin2": safe_get("-YMIN2-", "-4.0"),
         "ymax2": safe_get("-YMAX2-", "4.0"),
         "auto2": bool(safe_get("-AUTO2-", False)),
+        "math": safe_get("-MATH-", "CH1 - CH2"),
+        "yminm": safe_get("-YMINM-", "-4.0"),
+        "ymaxm": safe_get("-YMAXM-", "4.0"),
+        "autom": bool(safe_get("-AUTOM-", False)),
     }
 
 def set_settings(s):
@@ -385,6 +322,14 @@ def set_settings(s):
             window["-YMAX2-"].update(s["ymax2"])
         if "auto2" in s:
             window["-AUTO2-"].update(bool(s["auto2"]))
+        if "math" in s:
+            window["-MATH-"].update(s["math"])
+        if "yminm" in s:
+            window["-YMINM-"].update(s["yminm"])
+        if "ymaxm" in s:
+            window["-YMAXM-"].update(s["ymaxm"])
+        if "autom" in s:
+            window["-AUTOM-"].update(bool(s["autom"]))
         log("Settings loaded")
     except Exception as e:
         log(f"Load settings error: {e}")
@@ -687,7 +632,7 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key
 
     railed_high = False
     railed_low = False
-    if len(ydata) >= 1:
+    if len(ydata) >= 1 and rail_h_key and rail_l_key:
         rail_min, rail_max = get_scope_rail_limits(scale_key, probe_key)
         dmin = min(ydata)
         dmax = max(ydata)
@@ -697,10 +642,12 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key
         if dmin <= rail_min + eps:
             railed_low = True
 
-    window[rail_h_key].update("Railed High" if railed_high else "")
-    window[rail_l_key].update("Railed Low" if railed_low else "")
+    if rail_h_key:
+        window[rail_h_key].update("Railed High" if railed_high else "")
+    if rail_l_key:
+        window[rail_l_key].update("Railed Low" if railed_low else "")
 
-    probe = get_probe_factor(probe_key)
+    probe = get_probe_factor(probe_key) if probe_key else 1.0
 
     for i in range(9):
         y = margin + int((h - 2 * margin) * i / 8)
@@ -740,6 +687,9 @@ def draw_waveforms(data):
     y1 = data.get("y1")
     plot_trace("-WAVE1-", y0, "#FFD700", "-YMIN1-", "-YMAX1-", "-AUTO1-", "-PROBE1-", "-SCALE1-", "-RAIL1H-", "-RAIL1L-", show_tb=False)
     plot_trace("-WAVE2-", y1, "#00FFFF", "-YMIN2-", "-YMAX2-", "-AUTO2-", "-PROBE2-", "-SCALE2-", "-RAIL2H-", "-RAIL2L-", show_tb=True)
+    eq = safe_get("-MATH-", "CH1 - CH2")
+    math_data = compute_math(eq, to_list(y0), to_list(y1))
+    plot_trace("-WAVEM-", math_data, "#FF80FF", "-YMINM-", "-YMAXM-", "-AUTOM-", None, None, None, None, show_tb=False)
 
 def on_wheel(event, canvas_key):
     global zoom_x, pan_start
@@ -776,7 +726,7 @@ def on_release(event):
     drag_start_x = None
 
 def bind_events():
-    for key in ("-WAVE1-", "-WAVE2-"):
+    for key in ("-WAVE1-", "-WAVE2-", "-WAVEM-"):
         canvas = window[key].TKCanvas
         canvas.bind("<MouseWheel>", lambda e, k=key: on_wheel(e, k))
         canvas.bind("<Button-4>", lambda e, k=key: on_wheel(e, k))
@@ -877,9 +827,6 @@ while True:
     if event == "Show Log":
         show_log_window()
 
-    if event == "-MATH-":
-        show_math_window()
-
     if event == "-CONN-":
         try_connect()
 
@@ -911,7 +858,8 @@ while True:
 
     if event in ("-CH1-", "-CH2-", "-SCALE1-", "-SCALE2-", "-PROBE1-", "-PROBE2-", "-SRATE-", "-NSAMP-",
                  "-TRIGSRC-", "-SLOPE-", "-LEVEL-", "-POS-", "-AUTO-", "-NORM-", "-SINGLE-", "-TB-",
-                 "-YMIN1-", "-YMAX1-", "-AUTO1-", "-YMIN2-", "-YMAX2-", "-AUTO2-"):
+                 "-YMIN1-", "-YMAX1-", "-AUTO1-", "-YMIN2-", "-YMAX2-", "-AUTO2-",
+                 "-MATH-", "-YMINM-", "-YMAXM-", "-AUTOM-"):
         auto_save()
         last_save = now
         if last_data is not None:
