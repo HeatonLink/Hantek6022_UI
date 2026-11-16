@@ -81,7 +81,6 @@ selected_model = "Hantek 6022BE"
 connected = False
 device = None
 last_ping = 0
-log_visible = False
 last_data = None
 last_width = 0
 zoom_x = 1.0
@@ -90,6 +89,7 @@ last_save = 0
 current_values = {}
 running = False
 trigger_armed = False
+log_lines = ["GUI ready."]
 
 drag_start_x = None
 drag_start_pan = 0.0
@@ -155,9 +155,6 @@ layout = [
     [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-", expand_x=True)],
     [sg.Text("", key="-RAIL2L-", text_color="red", font=("Helvetica", 10, "bold"))],
     [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN-", expand_x=True, enable_events=True, disable_number_display=True, disabled=True)],
-
-    [sg.Text("Log", key="-LOGLABEL-", visible=False)],
-    [sg.Multiline("GUI ready.\n", size=(70, 8), key="-LOG-", visible=False, expand_x=True, autoscroll=False)],
 ]
 
 window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
@@ -167,21 +164,23 @@ window.TKroot.minsize(win_size[0], win_size[1])
 last_width = win_size[0]
 
 def log(msg):
-    try:
-        current = window["-LOG-"].get()
-        new_text = msg + "\n" + current
-        lines = new_text.splitlines(keepends=True)
-        if len(lines) > 200:
-            new_text = "".join(lines[:200])
-        window["-LOG-"].update(new_text)
-    except Exception:
-        pass
+    global log_lines
+    log_lines.insert(0, msg)
+    if len(log_lines) > 300:
+        log_lines = log_lines[:300]
 
-def toggle_log():
-    global log_visible
-    log_visible = not log_visible
-    window["-LOG-"].update(visible=log_visible)
-    window["-LOGLABEL-"].update(visible=log_visible)
+def show_log_window():
+    text = "\n".join(log_lines)
+    layout_log = [
+        [sg.Multiline(text, size=(90, 25), key="-LOGTEXT-", autoscroll=False, expand_x=True, expand_y=True)],
+        [sg.Button("Close")]
+    ]
+    win = sg.Window("Hantek Log", layout_log, resizable=True, finalize=True)
+    while True:
+        ev, _ = win.read()
+        if ev in (sg.WIN_CLOSED, "Close"):
+            break
+    win.close()
 
 def set_status(text):
     window["-STATUS-"].update(text)
@@ -792,7 +791,7 @@ while True:
         auto_save()
 
     if event == "Show Log":
-        toggle_log()
+        show_log_window()
 
     if event == "-CONN-":
         try_connect()
