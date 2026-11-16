@@ -2,6 +2,7 @@ import sys
 import traceback
 import os
 import subprocess
+import shutil
 
 def show_copyable_error(title, msg):
     """Write error to a text file next to the script and open it in Notepad so the user can copy it."""
@@ -182,7 +183,6 @@ def toggle_log():
     window["-LOG-"].update(visible=log_visible)
     window["-LOGLABEL-"].update(visible=log_visible)
     if log_visible:
-        # Expand window height so the log is visible and scrollable
         w, h = window.size
         window.size = (w, h + 250)
     else:
@@ -432,6 +432,42 @@ def do_force_trigger():
     except Exception as e:
         log(f"Force trigger failed: {e}")
 
+def setup_firmware():
+    """Copy firmware .hex and create index.json in the location pyhantek6022 expects."""
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        src_hex = os.path.join(script_dir, "dso6022be-firmware.hex")
+        if not os.path.exists(src_hex):
+            log(f"Firmware not found next to script: {src_hex}")
+            return False
+
+        fw_dir = os.path.join(os.path.expanduser("~"), ".config", "pyhantek6022", "firmware")
+        os.makedirs(fw_dir, exist_ok=True)
+
+        dest_hex = os.path.join(fw_dir, "dso6022be-firmware.hex")
+        shutil.copy2(src_hex, dest_hex)
+        log(f"Copied firmware to: {dest_hex}")
+
+        index = [
+            {
+                "name": "Hantek6022BE",
+                "idVendor_NoFW": 1204,
+                "idProduct_NoFW": 24610,
+                "fwtype": "cypress_fx2",
+                "idVendor_FW": 1205,
+                "idProduct_FW": 24610,
+                "firmware_file": "dso6022be-firmware.hex"
+            }
+        ]
+        index_path = os.path.join(fw_dir, "index.json")
+        with open(index_path, "w") as f:
+            json.dump(index, f, indent=2)
+        log(f"Wrote index.json to: {index_path}")
+        return True
+    except Exception as e:
+        log(f"Firmware setup failed: {e}")
+        return False
+
 def try_connect():
     global connected, device, running, trigger_armed
     if not DEVICE_OK:
@@ -442,12 +478,9 @@ def try_connect():
         log(f"Trying to connect to {selected_model}...")
         set_status("Status: Connecting...")
 
-        try:
-            # Look for firmware in the same folder as this script
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            os.chdir(script_dir)
-            log(f"Looking for firmware in: {script_dir}")
+        setup_firmware()
 
+        try:
             uploader = FirmwareUploader()
             pending = uploader.find_devs()
             log(f"Uninitialized devices found: {len(pending) if pending else 0}")
