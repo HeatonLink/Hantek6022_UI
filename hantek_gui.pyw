@@ -105,64 +105,68 @@ sample_rates = ["100kS/s", "200kS/s", "500kS/s", "1MS/s", "4MS/s", "8MS/s", "16M
 num_samples = ["1000", "2000", "5000", "10000", "20000", "50000"]
 
 channels_col = [
-    [sg.Text("Channels", font=("Helvetica", 12, "bold"))],
-    [sg.Checkbox("CH1", default=True, key="-CH1-", enable_events=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE1-", enable_events=True), sg.Text("Probe"), sg.Combo(["1x", "10x"], default_value="1x", size=(5, 1), key="-PROBE1-", enable_events=True)],
-    [sg.Checkbox("CH2", default=False, key="-CH2-", enable_events=True), sg.Text("Scale"), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE2-", enable_events=True), sg.Text("Probe"), sg.Combo(["1x", "10x"], default_value="1x", size=(5, 1), key="-PROBE2-", enable_events=True)],
-    [sg.Text("Sample Rate"), sg.Combo(sample_rates, default_value="1MS/s", size=(10, 1), key="-SRATE-", enable_events=True)],
-    [sg.Text("Samples"), sg.Combo(num_samples, default_value="10000", size=(10, 1), key="-NSAMP-", enable_events=True)],
+    [sg.Text("Channels", font=("Helvetica", 11, "bold"), pad=(0,0))],
+    [sg.Checkbox("CH1", default=True, key="-CH1-", enable_events=True, pad=(0,0)), sg.Text("Scale", pad=(2,0)), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE1-", enable_events=True, pad=(0,0)), sg.Text("Probe", pad=(2,0)), sg.Combo(["1x", "10x"], default_value="1x", size=(5, 1), key="-PROBE1-", enable_events=True, pad=(0,0))],
+    [sg.Checkbox("CH2", default=False, key="-CH2-", enable_events=True, pad=(0,0)), sg.Text("Scale", pad=(2,0)), sg.Combo(["50mV", "100mV", "200mV", "500mV", "1V", "2V", "5V"], default_value="1V", size=(8, 1), key="-SCALE2-", enable_events=True, pad=(0,0)), sg.Text("Probe", pad=(2,0)), sg.Combo(["1x", "10x"], default_value="1x", size=(5, 1), key="-PROBE2-", enable_events=True, pad=(0,0))],
+    [sg.Text("Sample Rate", pad=(0,0)), sg.Combo(sample_rates, default_value="1MS/s", size=(10, 1), key="-SRATE-", enable_events=True, pad=(0,0))],
+    [sg.Text("Samples", pad=(0,0)), sg.Combo(num_samples, default_value="10000", size=(10, 1), key="-NSAMP-", enable_events=True, pad=(0,0))],
 ]
 
 trigger_col = [
-    [sg.Text("Trigger", font=("Helvetica", 12, "bold"))],
-    [sg.Text("Source"), sg.Combo(["CH1", "CH2"], default_value="CH1", size=(8, 1), key="-TRIGSRC-", enable_events=True)],
-    [sg.Text("Slope"), sg.Combo(["Rising", "Falling", "Both"], default_value="Rising", size=(8, 1), key="-SLOPE-", enable_events=True)],
-    [sg.Text("Level"), sg.Input("0.0", size=(8, 1), key="-LEVEL-", enable_events=True), sg.Text("V")],
-    [sg.Text("Position"), sg.Slider(range=(0, 100), default_value=50, orientation="h", size=(15, 15), key="-POS-", enable_events=True)],
-    [sg.Radio("Auto", "MODE", default=True, key="-AUTO-", enable_events=True), sg.Radio("Normal", "MODE", key="-NORM-", enable_events=True), sg.Radio("Single", "MODE", key="-SINGLE-", enable_events=True)],
+    [sg.Text("Trigger", font=("Helvetica", 11, "bold"), pad=(0,0))],
+    [sg.Text("Source", pad=(0,0)), sg.Combo(["CH1", "CH2"], default_value="CH1", size=(8, 1), key="-TRIGSRC-", enable_events=True, pad=(0,0))],
+    [sg.Text("Slope", pad=(0,0)), sg.Combo(["Rising", "Falling", "Both"], default_value="Rising", size=(8, 1), key="-SLOPE-", enable_events=True, pad=(0,0))],
+    [sg.Text("Level", pad=(0,0)), sg.Input("0.0", size=(8, 1), key="-LEVEL-", enable_events=True, pad=(0,0)), sg.Text("V", pad=(0,0))],
+    [sg.Text("Position", pad=(0,0)), sg.Slider(range=(0, 100), default_value=50, orientation="h", size=(12, 12), key="-POS-", enable_events=True, pad=(0,0))],
+    [sg.Radio("Auto", "MODE", default=True, key="-AUTO-", enable_events=True, pad=(0,0)), sg.Radio("Normal", "MODE", key="-NORM-", enable_events=True, pad=(0,0)), sg.Radio("Single", "MODE", key="-SINGLE-", enable_events=True, pad=(0,0))],
 ]
 
 timebase_col = [
-    [sg.Text("Timebase", font=("Helvetica", 12, "bold"))],
-    [sg.Combo(["100us", "200us", "500us", "1ms", "2ms", "5ms", "10ms", "20ms"], default_value="1ms", size=(10, 1), key="-TB-", enable_events=True), sg.Text("/div")],
+    [sg.Text("Timebase", font=("Helvetica", 11, "bold"), pad=(0,0))],
+    [sg.Combo(["100us", "200us", "500us", "1ms", "2ms", "5ms", "10ms", "20ms"], default_value="1ms", size=(10, 1), key="-TB-", enable_events=True, pad=(0,0)), sg.Text("/div", pad=(0,0))],
+]
+
+content_layout = [
+    [sg.Menu(menu_def, key="-MENU-")],
+    [sg.Text("Hantek 6022BE", font=("Helvetica", 14, "bold"), key="-TITLE-", pad=(0,1)),
+     sg.Push(),
+     sg.Button("Connect", key="-CONN-", size=(10, 1), pad=(2,1)),
+     sg.Button("Disconnect", key="-DISC-", size=(10, 1), pad=(2,1)),
+     sg.Text("Status: Waiting", key="-STATUS-", pad=(5,1))],
+    [sg.HorizontalSeparator(pad=(0,1))],
+
+    [sg.Column(channels_col, vertical_alignment="top", pad=(0,0)), sg.VSeparator(pad=(2,0)),
+     sg.Column(trigger_col, vertical_alignment="top", pad=(0,0)), sg.VSeparator(pad=(2,0)),
+     sg.Column(timebase_col, vertical_alignment="top", pad=(0,0))],
+
+    [sg.HorizontalSeparator(pad=(0,1))],
+    [sg.Button("Acquire", key="-ACQ-", disabled=True, pad=(2,1)), sg.Button("Run / Stop", key="-RUN-", pad=(2,1)), sg.Button("Start Trigger", key="-TRIG-", pad=(2,1))],
+
+    [sg.HorizontalSeparator(pad=(0,1))],
+    [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-", pad=(0,0))],
+
+    [sg.HorizontalSeparator(pad=(0,1))],
+    [sg.Text("CH1", pad=(0,0)), sg.Push(), sg.Text("Y min", pad=(2,0)), sg.Input("-4.0", size=(5, 1), key="-YMIN1-", enable_events=True, pad=(0,0)), sg.Text("max", pad=(2,0)), sg.Input("4.0", size=(5, 1), key="-YMAX1-", enable_events=True, pad=(0,0)), sg.Checkbox("Auto", key="-AUTO1-", enable_events=True, pad=(2,0))],
+    [sg.Text("", key="-RAIL1H-", text_color="red", font=("Helvetica", 9, "bold"), pad=(0,0))],
+    [sg.Canvas(size=(600, 140), background_color="black", key="-WAVE1-", expand_x=True, pad=(0,0))],
+    [sg.Text("", key="-RAIL1L-", text_color="red", font=("Helvetica", 9, "bold"), pad=(0,0))],
+    [sg.Text("CH2", pad=(0,0)), sg.Push(), sg.Text("Y min", pad=(2,0)), sg.Input("-4.0", size=(5, 1), key="-YMIN2-", enable_events=True, pad=(0,0)), sg.Text("max", pad=(2,0)), sg.Input("4.0", size=(5, 1), key="-YMAX2-", enable_events=True, pad=(0,0)), sg.Checkbox("Auto", key="-AUTO2-", enable_events=True, pad=(2,0))],
+    [sg.Text("", key="-RAIL2H-", text_color="red", font=("Helvetica", 9, "bold"), pad=(0,0))],
+    [sg.Canvas(size=(600, 140), background_color="black", key="-WAVE2-", expand_x=True, pad=(0,0))],
+    [sg.Text("", key="-RAIL2L-", text_color="red", font=("Helvetica", 9, "bold"), pad=(0,0))],
+    [sg.Text("Math", pad=(0,0)), sg.Input("CH1 - CH2", size=(25, 1), key="-MATH-", enable_events=True, pad=(2,0)), sg.Push(), sg.Text("Y min", pad=(2,0)), sg.Input("-4.0", size=(5, 1), key="-YMINM-", enable_events=True, pad=(0,0)), sg.Text("max", pad=(2,0)), sg.Input("4.0", size=(5, 1), key="-YMAXM-", enable_events=True, pad=(0,0)), sg.Checkbox("Auto", key="-AUTOM-", enable_events=True, pad=(2,0))],
+    [sg.Canvas(size=(600, 140), background_color="black", key="-WAVEM-", expand_x=True, pad=(0,0))],
+    [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(40, 12), key="-PAN-", expand_x=True, enable_events=True, disable_number_display=True, disabled=True, pad=(0,1))],
 ]
 
 layout = [
-    [sg.Menu(menu_def, key="-MENU-")],
-    [sg.Text("Hantek 6022BE", font=("Helvetica", 16, "bold"), key="-TITLE-"),
-     sg.Push(),
-     sg.Button("Connect", key="-CONN-", size=(12, 1)),
-     sg.Button("Disconnect", key="-DISC-", size=(12, 1)),
-     sg.Text("Status: Waiting", key="-STATUS-")],
-    [sg.HorizontalSeparator()],
-
-    [sg.Column(channels_col, vertical_alignment="top"), sg.VSeparator(),
-     sg.Column(trigger_col, vertical_alignment="top"), sg.VSeparator(),
-     sg.Column(timebase_col, vertical_alignment="top")],
-
-    [sg.HorizontalSeparator()],
-    [sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop", key="-RUN-"), sg.Button("Start Trigger", key="-TRIG-")],
-
-    [sg.HorizontalSeparator()],
-    [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-")],
-
-    [sg.HorizontalSeparator()],
-    [sg.Text("CH1 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN1-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX1-", enable_events=True), sg.Checkbox("Auto", key="-AUTO1-", enable_events=True)],
-    [sg.Text("", key="-RAIL1H-", text_color="red", font=("Helvetica", 10, "bold"))],
-    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE1-", expand_x=True)],
-    [sg.Text("", key="-RAIL1L-", text_color="red", font=("Helvetica", 10, "bold"))],
-    [sg.Text("CH2 Waveform"), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMIN2-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAX2-", enable_events=True), sg.Checkbox("Auto", key="-AUTO2-", enable_events=True)],
-    [sg.Text("", key="-RAIL2H-", text_color="red", font=("Helvetica", 10, "bold"))],
-    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVE2-", expand_x=True)],
-    [sg.Text("", key="-RAIL2L-", text_color="red", font=("Helvetica", 10, "bold"))],
-    [sg.Text("Math"), sg.Input("CH1 - CH2", size=(30, 1), key="-MATH-", enable_events=True), sg.Push(), sg.Text("Y min"), sg.Input("-4.0", size=(6, 1), key="-YMINM-", enable_events=True), sg.Text("max"), sg.Input("4.0", size=(6, 1), key="-YMAXM-", enable_events=True), sg.Checkbox("Auto", key="-AUTOM-", enable_events=True)],
-    [sg.Canvas(size=(600, 180), background_color="black", key="-WAVEM-", expand_x=True)],
-    [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN-", expand_x=True, enable_events=True, disable_number_display=True, disabled=True)],
+    [sg.Column(content_layout, scrollable=True, vertical_scroll_only=True, size=(None, 700), expand_x=True, expand_y=True, key="-SCROLL-")]
 ]
 
 window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
 
 win_size = window.size
-window.TKroot.minsize(win_size[0], win_size[1])
+window.TKroot.minsize(800, 400)
 last_width = win_size[0]
 
 def log(msg):
@@ -585,18 +589,18 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key
     canvas = window[canvas_key].TKCanvas
     canvas.delete("all")
     w = canvas.winfo_width() or 600
-    h = canvas.winfo_height() or 180
-    margin = 40
+    h = canvas.winfo_height() or 140
+    margin = 28
 
+    for i in range(1, 6):
+        y = margin + int((h - 2 * margin) * i / 6)
+        canvas.create_line(margin, y, w - 5, y, fill="#333", dash=(2, 4))
     for i in range(1, 8):
-        y = margin + int((h - 2 * margin) * i / 8)
-        canvas.create_line(margin, y, w - margin, y, fill="#333", dash=(2, 4))
-    for i in range(1, 10):
-        x = margin + int((w - 2 * margin) * i / 10)
+        x = margin + int((w - margin - 5) * i / 8)
         canvas.create_line(x, margin, x, h - margin, fill="#333", dash=(2, 4))
 
     canvas.create_line(margin, margin, margin, h - margin, fill="#888")
-    canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
+    canvas.create_line(margin, h - margin, w - 5, h - margin, fill="#888")
 
     ydata = to_list(ydata)
     auto = bool(safe_get(auto_key, False))
@@ -649,14 +653,14 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key
 
     probe = get_probe_factor(probe_key) if probe_key else 1.0
 
-    for i in range(9):
-        y = margin + int((h - 2 * margin) * i / 8)
-        v = (ymax - (ymax - ymin) * i / 8) * probe
-        canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
+    for i in range(7):
+        y = margin + int((h - 2 * margin) * i / 6)
+        v = (ymax - (ymax - ymin) * i / 6) * probe
+        canvas.create_text(margin - 3, y, text=f"{v:.1f}", fill="#aaa", anchor="e", font=("Arial", 7))
 
     if show_tb:
         tb = window["-TB-"].get()
-        canvas.create_text(w // 2, h - margin + 15, text=f"{tb}/div  (zoom {zoom_x:.1f}x)", fill="#aaa", font=("Arial", 9))
+        canvas.create_text(w // 2, h - 6, text=f"{tb}/div", fill="#aaa", font=("Arial", 8))
 
     if len(ydata) < 2:
         return
@@ -672,7 +676,7 @@ def plot_trace(canvas_key, ydata, color, ymin_key, ymax_key, auto_key, probe_key
     pts = []
     vn = len(view)
     for i, val in enumerate(view):
-        x = margin + int((w - 2 * margin) * i / max(vn - 1, 1))
+        x = margin + int((w - margin - 5) * i / max(vn - 1, 1))
         norm = (val - ymin) / (ymax - ymin)
         norm = max(0.0, min(1.0, norm))
         y = margin + int((h - 2 * margin) * (1.0 - norm))
