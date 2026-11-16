@@ -156,7 +156,7 @@ layout = [
     [sg.Slider(range=(0, 100), default_value=0, orientation="h", size=(50, 15), key="-PAN-", expand_x=True, enable_events=True, disable_number_display=True, disabled=True)],
 
     [sg.Text("Log", key="-LOGLABEL-", visible=False)],
-    [sg.Multiline("GUI ready.\n", size=(70, 6), key="-LOG-", visible=False, expand_x=True)],
+    [sg.Multiline("GUI ready.\n", size=(70, 12), key="-LOG-", visible=False, expand_x=True, expand_y=True, autoscroll=False)],
 ]
 
 window = sg.Window("Hantek 6022", layout, resizable=True, finalize=True)
@@ -170,8 +170,8 @@ def log(msg):
         current = window["-LOG-"].get()
         new_text = msg + "\n" + current
         lines = new_text.splitlines(keepends=True)
-        if len(lines) > 40:
-            new_text = "".join(lines[:40])
+        if len(lines) > 200:
+            new_text = "".join(lines[:200])
         window["-LOG-"].update(new_text)
     except Exception:
         pass
@@ -181,6 +181,13 @@ def toggle_log():
     log_visible = not log_visible
     window["-LOG-"].update(visible=log_visible)
     window["-LOGLABEL-"].update(visible=log_visible)
+    if log_visible:
+        # Expand window height so the log is visible and scrollable
+        w, h = window.size
+        window.size = (w, h + 250)
+    else:
+        w, h = window.size
+        window.size = (w, max(h - 250, window.TKroot.minsize()[1]))
 
 def set_status(text):
     window["-STATUS-"].update(text)
