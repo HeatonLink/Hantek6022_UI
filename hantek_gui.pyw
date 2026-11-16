@@ -1,37 +1,52 @@
 import sys
 import traceback
 import os
+import subprocess
 
-def show_startup_error(msg):
+def show_copyable_error(title, msg):
+    """Write error to a text file next to the script and open it in Notepad so the user can copy it."""
     try:
-        import PySimpleGUI as sg
-        sg.popup_error(msg, title="Hantek 6022 GUI Error", keep_on_top=True)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
     except Exception:
+        script_dir = os.getcwd()
+
+    log_path = os.path.join(script_dir, "hantek_error.txt")
+    full_msg = f"{title}\n\n{msg}\n\n--- Diagnostic info ---\nPython executable: {sys.executable}\nPython version: {sys.version}\nsys.path:\n" + "\n".join(sys.path)
+
+    try:
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(full_msg)
+    except Exception:
+        log_path = os.path.join(os.path.expanduser("~"), "hantek_error.txt")
         try:
-            import tkinter as tk
-            from tkinter import messagebox
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror("Hantek 6022 GUI Error", msg)
-            root.destroy()
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write(full_msg)
         except Exception:
-            try:
-                log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hantek_error.log")
-                with open(log_path, "w") as f:
-                    f.write(msg)
-            except Exception:
-                pass
+            return
+
+    # Open in Notepad so the user can easily copy the text
+    try:
+        subprocess.Popen(["notepad.exe", log_path])
+    except Exception:
+        # Fallback: try to open with default text editor
+        try:
+            os.startfile(log_path)
+        except Exception:
+            pass
 
 try:
     import PySimpleGUI as sg
 except ModuleNotFoundError:
     msg = (
-        "PySimpleGUI is not installed.\n\n"
-        "Copy and paste this into a Command Prompt or PowerShell:\n\n"
-        "pip install PySimpleGUI\n\n"
-        "Then run the script again."
+        "PySimpleGUI is not installed for the Python that is running this script.\n\n"
+        "The .pyw file is probably being launched with a different Python than the one where you ran 'pip install'.\n\n"
+        "Copy and paste ONE of these commands into a Command Prompt (not PowerShell if it fails):\n\n"
+        f"\"{sys.executable}\" -m pip install PySimpleGUI\n\n"
+        "or\n\n"
+        "python -m pip install PySimpleGUI\n\n"
+        "Then try running the script again."
     )
-    show_startup_error(msg)
+    show_copyable_error("PySimpleGUI Missing", msg)
     sys.exit(1)
 
 import time
@@ -48,7 +63,10 @@ except Exception as e:
     DSO6022BE = None
     get_dsos = None
     FirmwareUploader = None
-    show_startup_error(f"Failed to import pyhantek6022:\n{e}\n\nInstall with:\npip install pyhantek6022")
+    show_copyable_error(
+        "pyhantek6022 Missing",
+        f"Failed to import pyhantek6022:\n{e}\n\nInstall with:\n\"{sys.executable}\" -m pip install pyhantek6022"
+    )
 
 selected_model = "Hantek 6022BE"
 connected = False
