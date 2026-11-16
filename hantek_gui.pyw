@@ -483,14 +483,15 @@ def try_connect():
                 uploaded = FirmwareUploader.init_all()
                 log(f"Firmware upload result: {uploaded}")
                 if uploaded:
-                    time.sleep(2)
+                    log("Waiting for device to renumerate...")
+                    time.sleep(5)
         except Exception as e:
             log(f"Firmware step error: {e}")
 
         dsos = get_dsos() or []
         log(f"Initialized devices found: {len(dsos)}")
         if not dsos:
-            log("No device found after firmware step")
+            log("No device found after firmware step - you may need WinUSB driver on 04B5:6022")
             set_status("Status: No device")
             return False
 
