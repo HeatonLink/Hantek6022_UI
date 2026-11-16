@@ -24,26 +24,29 @@ def show_copyable_error(title, msg):
         except Exception:
             return
 
-    # Open in Notepad so the user can easily copy the text
     try:
         subprocess.Popen(["notepad.exe", log_path])
     except Exception:
-        # Fallback: try to open with default text editor
         try:
             os.startfile(log_path)
         except Exception:
             pass
 
+def get_install_python():
+    """Return the python.exe path that should be used for pip (not pythonw.exe)."""
+    exe = sys.executable
+    if exe.lower().endswith("pythonw.exe"):
+        return exe[:-1]  # change pythonw.exe -> python.exe
+    return exe
+
 try:
     import PySimpleGUI as sg
 except ModuleNotFoundError:
+    py = get_install_python()
     msg = (
         "PySimpleGUI is not installed for the Python that is running this script.\n\n"
-        "The .pyw file is probably being launched with a different Python than the one where you ran 'pip install'.\n\n"
-        "Copy and paste ONE of these commands into a Command Prompt (not PowerShell if it fails):\n\n"
-        f"\"{sys.executable}\" -m pip install PySimpleGUI\n\n"
-        "or\n\n"
-        "python -m pip install PySimpleGUI\n\n"
+        "Copy and paste this command into a Command Prompt:\n\n"
+        f"\"{py}\" -m pip install PySimpleGUI\n\n"
         "Then try running the script again."
     )
     show_copyable_error("PySimpleGUI Missing", msg)
@@ -63,10 +66,15 @@ except Exception as e:
     DSO6022BE = None
     get_dsos = None
     FirmwareUploader = None
-    show_copyable_error(
-        "pyhantek6022 Missing",
-        f"Failed to import pyhantek6022:\n{e}\n\nInstall with:\n\"{sys.executable}\" -m pip install pyhantek6022"
+    py = get_install_python()
+    msg = (
+        "pyhantek6022 is not installed for the Python that is running this script.\n\n"
+        f"Error: {e}\n\n"
+        "Copy and paste this command into a Command Prompt:\n\n"
+        f"\"{py}\" -m pip install pyhantek6022\n\n"
+        "Then try running the script again."
     )
+    show_copyable_error("pyhantek6022 Missing", msg)
 
 selected_model = "Hantek 6022BE"
 connected = False
