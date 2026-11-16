@@ -436,6 +436,11 @@ def try_connect():
         set_status("Status: Connecting...")
 
         try:
+            # Look for firmware in the same folder as this script
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            os.chdir(script_dir)
+            log(f"Looking for firmware in: {script_dir}")
+
             uploader = FirmwareUploader()
             pending = uploader.find_devs()
             log(f"Uninitialized devices found: {len(pending) if pending else 0}")
