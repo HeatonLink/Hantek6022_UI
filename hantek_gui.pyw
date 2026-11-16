@@ -90,6 +90,7 @@ current_values = {}
 running = False
 trigger_armed = False
 log_lines = ["GUI ready."]
+math_equation = "CH1 - CH2"
 
 drag_start_x = None
 drag_start_pan = 0.0
@@ -140,7 +141,7 @@ layout = [
      sg.Column(timebase_col, vertical_alignment="top")],
 
     [sg.HorizontalSeparator()],
-    [sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop", key="-RUN-"), sg.Button("Start Trigger", key="-TRIG-")],
+    [sg.Button("Acquire", key="-ACQ-", disabled=True), sg.Button("Run / Stop", key="-RUN-"), sg.Button("Start Trigger", key="-TRIG-"), sg.Button("Math", key="-MATH-")],
 
     [sg.HorizontalSeparator()],
     [sg.Text("CH1: 0.00 V   CH2: 0.00 V", key="-READOUT-")],
@@ -180,6 +181,89 @@ def show_log_window():
         ev, _ = win.read()
         if ev in (sg.WIN_CLOSED, "Close"):
             break
+    win.close()
+
+def compute_math(eq, y0, y1):
+    try:
+        n = max(len(y0), len(y1))
+        if n == 0:
+            return []
+        result = []
+        for i in range(n):
+            ch1 = y0[i] if i < len(y0) else 0.0
+            ch2 = y1[i] if i < len(y1) else 0.0
+            expr = eq.replace("CH1", str(ch1)).replace("CH2", str(ch2))
+            result.append(eval(expr, {"__builtins__": {}}, {}))
+        return result
+    except Exception as e:
+        log(f"Math error: {e}")
+        return []
+
+def show_math_window():
+    global math_equation
+    layout_m = [
+        [sg.Text("Equation (use CH1 and CH2)"), sg.Input(math_equation, key="-EQ-", size=(40, 1))],
+        [sg.Button("Update"), sg.Button("Close")],
+        [sg.Canvas(size=(700, 250), background_color="black", key="-MATHCANVAS-", expand_x=True)]
+    ]
+    win = sg.Window("Math Channel", layout_m, resizable=True, finalize=True)
+    canvas = win["-MATHCANVAS-"].TKCanvas
+
+    def draw_math(data):
+        canvas.delete("all")
+        w = canvas.winfo_width() or 700
+        h = canvas.winfo_height() or 250
+        margin = 40
+        if data is None:
+            canvas.create_text(w//2, h//2, text="No data", fill="white")
+            return
+        y0 = to_list(data.get("y0") if data.get("y0") is not None else data.get("y"))
+        y1 = to_list(data.get("y1"))
+        eq = win["-EQ-"].get().strip() or "CH1 - CH2"
+        result = compute_math(eq, y0, y1)
+        if len(result) < 2:
+            canvas.create_text(w//2, h//2, text="Need data from both channels", fill="white")
+            return
+        dmin = min(result)
+        dmax = max(result)
+        span = dmax - dmin
+        if span == 0:
+            span = 1.0
+        ymin = dmin - 0.1 * span
+        ymax = dmax + 0.1 * span
+        for i in range(1, 8):
+            y = margin + int((h - 2 * margin) * i / 8)
+            canvas.create_line(margin, y, w - margin, y, fill="#333", dash=(2, 4))
+        for i in range(1, 10):
+            x = margin + int((w - 2 * margin) * i / 10)
+            canvas.create_line(x, margin, x, h - margin, fill="#333", dash=(2, 4))
+        canvas.create_line(margin, margin, margin, h - margin, fill="#888")
+        canvas.create_line(margin, h - margin, w - margin, h - margin, fill="#888")
+        for i in range(9):
+            y = margin + int((h - 2 * margin) * i / 8)
+            v = ymax - (ymax - ymin) * i / 8
+            canvas.create_text(margin - 5, y, text=f"{v:.2f}", fill="#aaa", anchor="e", font=("Arial", 8))
+        pts = []
+        n = len(result)
+        for i, val in enumerate(result):
+            x = margin + int((w - 2 * margin) * i / max(n - 1, 1))
+            norm = (val - ymin) / (ymax - ymin)
+            norm = max(0.0, min(1.0, norm))
+            y = margin + int((h - 2 * margin) * (1.0 - norm))
+            pts.extend([x, y])
+        if len(pts) >= 4:
+            canvas.create_line(pts, fill="#FF80FF", width=1)
+        canvas.create_text(w//2, 15, text=eq, fill="#FF80FF", font=("Arial", 10, "bold"))
+
+    draw_math(last_data)
+
+    while True:
+        ev, vals = win.read(timeout=300 if running else None)
+        if ev in (sg.WIN_CLOSED, "Close"):
+            break
+        if ev == "Update" or running:
+            draw_math(last_data)
+            math_equation = vals.get("-EQ-", math_equation)
     win.close()
 
 def set_status(text):
@@ -792,6 +876,9 @@ while True:
 
     if event == "Show Log":
         show_log_window()
+
+    if event == "-MATH-":
+        show_math_window()
 
     if event == "-CONN-":
         try_connect()
